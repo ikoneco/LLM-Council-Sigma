@@ -2,8 +2,6 @@
 
 **LLM Council** is a sophisticated multi-agent orchestration system that simulates a "council of experts" to solve complex user queries. Instead of a single zero-shot response, it employs a rigorous 7-stage pipeline where dynamic expert personas analyze, brainstorm, contribute, verify, and synthesize a high-quality final artifact.
 
-![LLM Council UI](./assets/ui_preview.webp)
-
 ## ✨ Key Features
 
 - **Multi-Stage Orchestration**: Moves beyond simple prompting to a state-managed workflow.
