@@ -1,0 +1,118 @@
+.stage.stage0 {
+    background: linear-gradient(135deg, #faf5ff, #f3e8ff);
+    border-color: #e9d5ff;
+}
+
+.stage-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0 0 16px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Intent Analysis */
+.intent-analysis {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    border: 1px solid #e9d5ff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.analysis-content {
+    color: #475569;
+}
+
+.analysis-content h3 {
+    font-size: 1rem;
+    color: #7c3aed;
+    margin: 0 0 8px 0;
+}
+
+/* Experts Section */
+.experts-section {
+    margin-top: 20px;
+}
+
+.experts-heading {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #7c3aed;
+    margin: 0 0 12px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.experts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+}
+
+.expert-card {
+    display: flex;
+    gap: 14px;
+    background: #ffffff;
+    padding: 14px 16px;
+    border-radius: 10px;
+    border: 1px solid #e9d5ff;
+    transition: all 0.2s;
+}
+
+.expert-card:hover {
+    border-color: #c4b5fd;
+    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.08);
+}
+
+.expert-order {
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.expert-card.order-1 .expert-order {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+}
+
+.expert-card.order-2 .expert-order {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
+
+.expert-card.order-3 .expert-order {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+
+.expert-card.order-4 .expert-order {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+}
+
+.expert-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.expert-card-name {
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 4px;
+    font-size: 0.9rem;
+}
+
+.expert-card-description {
+    color: #64748b;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    margin: 0;
+}

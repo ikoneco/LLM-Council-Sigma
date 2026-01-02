@@ -10,18 +10,6 @@ function App() {
   const [currentConversation, setCurrentConversation] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Load conversations on mount
-  useEffect(() => {
-    loadConversations();
-  }, []);
-
-  // Load conversation details when selected
-  useEffect(() => {
-    if (currentConversationId) {
-      loadConversation(currentConversationId);
-    }
-  }, [currentConversationId]);
-
   const loadConversations = async () => {
     try {
       const convs = await api.listConversations();
@@ -40,6 +28,16 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    loadConversations();
+  }, []);
+
+  useEffect(() => {
+    if (currentConversationId) {
+      loadConversation(currentConversationId);
+    }
+  }, [currentConversationId]);
+
   const handleNewConversation = async () => {
     try {
       const newConv = await api.createConversation();
@@ -53,6 +51,19 @@ function App() {
     }
   };
 
+  const handleDeleteConversation = async (id) => {
+    try {
+      await api.deleteConversation(id);
+      setConversations((prev) => prev.filter((c) => c.id !== id));
+      if (currentConversationId === id) {
+        setCurrentConversationId(null);
+        setCurrentConversation(null);
+      }
+    } catch (error) {
+      console.error('Failed to delete conversation:', error);
+    }
+  };
+
   const handleSelectConversation = (id) => {
     setCurrentConversationId(id);
   };
@@ -62,71 +73,191 @@ function App() {
 
     setIsLoading(true);
     try {
-      // Optimistically add user message to UI
       const userMessage = { role: 'user', content };
       setCurrentConversation((prev) => ({
         ...prev,
         messages: [...prev.messages, userMessage],
       }));
 
-      // Create a partial assistant message that will be updated progressively
       const assistantMessage = {
         role: 'assistant',
-        stage1: null,
-        stage2: null,
+        stage0: null,
+        brainstorm_content: null,
+        experts: null,
+        contributions: [],
         stage3: null,
         metadata: null,
         loading: {
-          stage1: false,
-          stage2: false,
+          stage0: false,
+          brainstorm: false,
+          contributions: false,
+          currentOrder: 0,
+          verification: false,
+          planning: false,
+          editorial: false,
           stage3: false,
         },
       };
 
-      // Add the partial assistant message
       setCurrentConversation((prev) => ({
         ...prev,
         messages: [...prev.messages, assistantMessage],
       }));
 
-      // Send message with streaming
       await api.sendMessageStream(currentConversationId, content, (eventType, event) => {
         switch (eventType) {
-          case 'stage1_start':
+          case 'stage0_start':
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
-              const lastMsg = messages[messages.length - 1];
-              lastMsg.loading.stage1 = true;
+              const lastMsg = { ...messages[messages.length - 1], loading: { ...messages[messages.length - 1].loading, stage0: true } };
+              messages[messages.length - 1] = lastMsg;
               return { ...prev, messages };
             });
             break;
 
-          case 'stage1_complete':
+          case 'stage0_complete':
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
-              const lastMsg = messages[messages.length - 1];
-              lastMsg.stage1 = event.data;
-              lastMsg.loading.stage1 = false;
+              const lastMsg = {
+                ...messages[messages.length - 1],
+                stage0: event.data,
+                loading: { ...messages[messages.length - 1].loading, stage0: false }
+              };
+              messages[messages.length - 1] = lastMsg;
               return { ...prev, messages };
             });
             break;
 
-          case 'stage2_start':
+          case 'brainstorm_start':
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
-              const lastMsg = messages[messages.length - 1];
-              lastMsg.loading.stage2 = true;
+              const lastMsg = { ...messages[messages.length - 1], loading: { ...messages[messages.length - 1].loading, brainstorm: true } };
+              messages[messages.length - 1] = lastMsg;
               return { ...prev, messages };
             });
             break;
 
-          case 'stage2_complete':
+          case 'brainstorm_complete':
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
-              const lastMsg = messages[messages.length - 1];
-              lastMsg.stage2 = event.data;
-              lastMsg.metadata = event.metadata;
-              lastMsg.loading.stage2 = false;
+              const lastMsg = {
+                ...messages[messages.length - 1],
+                experts: event.data.experts,
+                brainstorm_content: event.data.brainstorm_content,
+                loading: { ...messages[messages.length - 1].loading, brainstorm: false }
+              };
+              messages[messages.length - 1] = lastMsg;
+              return { ...prev, messages };
+            });
+            break;
+
+          case 'contributions_start':
+            setCurrentConversation((prev) => {
+              const messages = [...prev.messages];
+              const lastMsg = { ...messages[messages.length - 1], loading: { ...messages[messages.length - 1].loading, contributions: true } };
+              messages[messages.length - 1] = lastMsg;
+              return { ...prev, messages };
+            });
+            break;
+
+          case 'expert_start':
+            setCurrentConversation((prev) => {
+              const messages = [...prev.messages];
+              const lastMsg = {
+                ...messages[messages.length - 1],
+                loading: { ...messages[messages.length - 1].loading, currentOrder: event.data.order }
+              };
+              messages[messages.length - 1] = lastMsg;
+              return { ...prev, messages };
+            });
+            break;
+
+          case 'expert_complete':
+            setCurrentConversation((prev) => {
+              const messages = [...prev.messages];
+              const lastMsg = {
+                ...messages[messages.length - 1],
+                contributions: [...(messages[messages.length - 1].contributions || []), event.data]
+              };
+              messages[messages.length - 1] = lastMsg;
+              return { ...prev, messages };
+            });
+            break;
+
+          case 'contributions_complete':
+            setCurrentConversation((prev) => {
+              const messages = [...prev.messages];
+              const lastMsg = {
+                ...messages[messages.length - 1],
+                loading: { ...messages[messages.length - 1].loading, contributions: false }
+              };
+              messages[messages.length - 1] = lastMsg;
+              return { ...prev, messages };
+            });
+            break;
+
+          case 'verification_start':
+            setCurrentConversation((prev) => {
+              const messages = [...prev.messages];
+              const lastMsg = { ...messages[messages.length - 1], loading: { ...messages[messages.length - 1].loading, verification: true } };
+              messages[messages.length - 1] = lastMsg;
+              return { ...prev, messages };
+            });
+            break;
+
+          case 'verification_complete':
+            setCurrentConversation((prev) => {
+              const messages = [...prev.messages];
+              const lastMsg = {
+                ...messages[messages.length - 1],
+                metadata: { ...messages[messages.length - 1].metadata, verification_data: event.data },
+                loading: { ...messages[messages.length - 1].loading, verification: false }
+              };
+              messages[messages.length - 1] = lastMsg;
+              return { ...prev, messages };
+            });
+            break;
+
+          case 'planning_start':
+            setCurrentConversation((prev) => {
+              const messages = [...prev.messages];
+              const lastMsg = { ...messages[messages.length - 1], loading: { ...messages[messages.length - 1].loading, planning: true } };
+              messages[messages.length - 1] = lastMsg;
+              return { ...prev, messages };
+            });
+            break;
+
+          case 'planning_complete':
+            setCurrentConversation((prev) => {
+              const messages = [...prev.messages];
+              const lastMsg = {
+                ...messages[messages.length - 1],
+                metadata: { ...messages[messages.length - 1].metadata, synthesis_plan: event.data },
+                loading: { ...messages[messages.length - 1].loading, planning: false }
+              };
+              messages[messages.length - 1] = lastMsg;
+              return { ...prev, messages };
+            });
+            break;
+
+          case 'editorial_start':
+            setCurrentConversation((prev) => {
+              const messages = [...prev.messages];
+              const lastMsg = { ...messages[messages.length - 1], loading: { ...messages[messages.length - 1].loading, editorial: true } };
+              messages[messages.length - 1] = lastMsg;
+              return { ...prev, messages };
+            });
+            break;
+
+          case 'editorial_complete':
+            setCurrentConversation((prev) => {
+              const messages = [...prev.messages];
+              const lastMsg = {
+                ...messages[messages.length - 1],
+                metadata: { ...messages[messages.length - 1].metadata, editorial_guidelines: event.data },
+                loading: { ...messages[messages.length - 1].loading, editorial: false }
+              };
+              messages[messages.length - 1] = lastMsg;
               return { ...prev, messages };
             });
             break;
@@ -134,8 +265,8 @@ function App() {
           case 'stage3_start':
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
-              const lastMsg = messages[messages.length - 1];
-              lastMsg.loading.stage3 = true;
+              const lastMsg = { ...messages[messages.length - 1], loading: { ...messages[messages.length - 1].loading, stage3: true } };
+              messages[messages.length - 1] = lastMsg;
               return { ...prev, messages };
             });
             break;
@@ -143,20 +274,21 @@ function App() {
           case 'stage3_complete':
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
-              const lastMsg = messages[messages.length - 1];
-              lastMsg.stage3 = event.data;
-              lastMsg.loading.stage3 = false;
+              const lastMsg = {
+                ...messages[messages.length - 1],
+                stage3: event.data,
+                loading: { ...messages[messages.length - 1].loading, stage3: false }
+              };
+              messages[messages.length - 1] = lastMsg;
               return { ...prev, messages };
             });
             break;
 
           case 'title_complete':
-            // Reload conversations to get updated title
             loadConversations();
             break;
 
           case 'complete':
-            // Stream complete, reload conversations list
             loadConversations();
             setIsLoading(false);
             break;
@@ -172,7 +304,6 @@ function App() {
       });
     } catch (error) {
       console.error('Failed to send message:', error);
-      // Remove optimistic messages on error
       setCurrentConversation((prev) => ({
         ...prev,
         messages: prev.messages.slice(0, -2),
@@ -188,6 +319,7 @@ function App() {
         currentConversationId={currentConversationId}
         onSelectConversation={handleSelectConversation}
         onNewConversation={handleNewConversation}
+        onDeleteConversation={handleDeleteConversation}
       />
       <ChatInterface
         conversation={currentConversation}

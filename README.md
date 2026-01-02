@@ -2,86 +2,93 @@
 
 ![llmcouncil](header.jpg)
 
-The idea of this repo is that instead of asking a question to your favorite LLM provider (e.g. OpenAI GPT 5.1, Google Gemini 3.0 Pro, Anthropic Claude Sonnet 4.5, xAI Grok 4, eg.c), you can group them into your "LLM Council". This repo is a simple, local web app that essentially looks like ChatGPT except it uses OpenRouter to send your query to multiple LLMs, it then asks them to review and rank each other's work, and finally a Chairman LLM produces the final response.
+**LLM Council** is a next-generation AI orchestration platform that doesn't just answer questions—it assembles a bespoke team of AI experts to solve them.
 
-In a bit more detail, here is what happens when you submit a query:
+Instead of a single LLM responding to your prompt, LLM Council orchestrates a **7-Stage Sequential Collaboration** where multiple top-tier models (Gemini, Claude, GPT-4, etc.) brainstorm, research, verify, and synthesize a single, world-class artifact.
 
-1. **Stage 1: First opinions**. The user query is given to all LLMs individually, and the responses are collected. The individual responses are shown in a "tab view", so that the user can inspect them all one by one.
-2. **Stage 2: Review**. Each individual LLM is given the responses of the other LLMs. Under the hood, the LLM identities are anonymized so that the LLM can't play favorites when judging their outputs. The LLM is asked to rank them in accuracy and insight.
-3. **Stage 3: Final response**. The designated Chairman of the LLM Council takes all of the model's responses and compiles them into a single final answer that is presented to the user.
+## 🚀 Key Features
 
-## Vibe Code Alert
+- **7-Stage Cognitive Pipeline**:
+    1. **Intent Analysis**: Deeply understands what you *really* want.
+    2. **Global Brainstorming**: All models propose expert roles tailored to your query.
+    3. **Team Assembly**: A Chairman model selects the perfect 6-person expert team.
+    4. **Sequential Collaboration**: Experts build on each other's work (not just debate).
+    5. **Real-time Verification**: Claims are fact-checked mid-stream.
+    6. **Strategic Planning**: A "Synthesis Architect" & "Editorial Director" plan the final output.
+    7. **Final Synthesis**: A unified, high-quality response (no chat threads to read).
+- **Multi-Model Intelligence**: Leverages the best models via OpenRouter (Gemini 2.0, DeepSeek v3, Qwen 2.5, Minimax, etc.).
+- **Transparent Process**: Watch the "mind" of the council work in real-time on the frontend.
 
-This project was 99% vibe coded as a fun Saturday hack because I wanted to explore and evaluate a number of LLMs side by side in the process of [reading books together with LLMs](https://x.com/karpathy/status/1990577951671509438). It's nice and useful to see multiple responses side by side, and also the cross-opinions of all LLMs on each other's outputs. I'm not going to support it in any way, it's provided here as is for other people's inspiration and I don't intend to improve it. Code is ephemeral now and libraries are over, ask your LLM to change it in whatever way you like.
+## 📚 Documentation
 
-## Setup
+- [Architecture Overview](docs/ARCHITECTURE.md) - Deep dive into the 7-stage pipeline.
+- [API Reference](docs/API.md) - Backend API endpoints.
+- [Contributing Guide](CONTRIBUTING.md) - How to help us improve.
 
-### 1. Install Dependencies
+## 🛠️ Setup
 
-The project uses [uv](https://docs.astral.sh/uv/) for project management.
+### 1. Prerequisites
+
+- [uv](https://docs.astral.sh/uv/) (for Python)
+- Node.js & npm (for Frontend)
+- [OpenRouter](https://openrouter.ai/) API Key
+
+### 2. Installation
 
 **Backend:**
+
 ```bash
 uv sync
 ```
 
 **Frontend:**
+
 ```bash
 cd frontend
 npm install
 cd ..
 ```
 
-### 2. Configure API Key
+### 3. Configuration
 
-Create a `.env` file in the project root:
+Create a `.env` file in the root:
 
 ```bash
-OPENROUTER_API_KEY=sk-or-v1-...
+OPENROUTER_API_KEY=sk-or-v1-your-key-here
 ```
 
-Get your API key at [openrouter.ai](https://openrouter.ai/). Make sure to purchase the credits you need, or sign up for automatic top up.
+(Optional) Customize models in `backend/config.py`.
 
-### 3. Configure Models (Optional)
+## 🏃‍♂️ Running the Application
 
-Edit `backend/config.py` to customize the council:
+**Option 1: Quick Start**
 
-```python
-COUNCIL_MODELS = [
-    "openai/gpt-5.1",
-    "google/gemini-3-pro-preview",
-    "anthropic/claude-sonnet-4.5",
-    "x-ai/grok-4",
-]
-
-CHAIRMAN_MODEL = "google/gemini-3-pro-preview"
-```
-
-## Running the Application
-
-**Option 1: Use the start script**
 ```bash
 ./start.sh
 ```
 
-**Option 2: Run manually**
-
+**Option 2: Manual Start**
 Terminal 1 (Backend):
+
 ```bash
 uv run python -m backend.main
 ```
 
 Terminal 2 (Frontend):
+
 ```bash
 cd frontend
 npm run dev
 ```
 
-Then open http://localhost:5173 in your browser.
+Open [http://localhost:5173](http://localhost:5173) to consult the council.
 
-## Tech Stack
+## 🏗️ Architecture
 
-- **Backend:** FastAPI (Python 3.10+), async httpx, OpenRouter API
-- **Frontend:** React + Vite, react-markdown for rendering
-- **Storage:** JSON files in `data/conversations/`
-- **Package Management:** uv for Python, npm for JavaScript
+The system uses a **FastAPI** backend to orchestrate the cognitive workflow and a **React** frontend to visualize the streaming process via Server-Sent Events (SSE).
+
+State is managed via `council.py` (logic) and `storage.py` (JSON persistence).
+
+## License
+
+MIT License. Vibe coded with love.

@@ -129,18 +129,14 @@ def add_user_message(conversation_id: str, content: str):
 
 def add_assistant_message(
     conversation_id: str,
+    stage0_personas: List[Dict[str, Any]],
     stage1: List[Dict[str, Any]],
     stage2: List[Dict[str, Any]],
-    stage3: Dict[str, Any]
+    stage3: Dict[str, Any],
+    metadata: Dict[str, Any] = None
 ):
     """
-    Add an assistant message with all 3 stages to a conversation.
-
-    Args:
-        conversation_id: Conversation identifier
-        stage1: List of individual model responses
-        stage2: List of model rankings
-        stage3: Final synthesized response
+    Add an assistant message with all stages to a conversation.
     """
     conversation = get_conversation(conversation_id)
     if conversation is None:
@@ -148,9 +144,12 @@ def add_assistant_message(
 
     conversation["messages"].append({
         "role": "assistant",
+        "content": stage3["response"],
+        "stage0": stage0_personas,
         "stage1": stage1,
         "stage2": stage2,
-        "stage3": stage3
+        "stage3": stage3,
+        "metadata": metadata or {}
     })
 
     save_conversation(conversation)
@@ -170,3 +169,51 @@ def update_conversation_title(conversation_id: str, title: str):
 
     conversation["title"] = title
     save_conversation(conversation)
+
+
+def delete_conversation(conversation_id: str):
+    """
+    Delete a conversation from storage.
+
+    Args:
+        conversation_id: Unique identifier for the conversation
+    """
+    path = get_conversation_path(conversation_id)
+    if os.path.exists(path):
+        os.remove(path)
+    else:
+        raise ValueError(f"Conversation {conversation_id} not found")
+
+
+def add_assistant_message_debate(
+    conversation_id: str,
+    first_expert: Dict[str, Any],
+    debate_history: List[Dict[str, Any]],
+    stage3: Dict[str, Any],
+    metadata: Dict[str, Any] = None
+):
+    """
+    Add an assistant message with sequential debate data to a conversation.
+    
+    Args:
+        conversation_id: Conversation identifier
+        first_expert: The first expert selected in Stage 0
+        debate_history: List of debate entries (4 generations)
+        stage3: Final synthesis result
+        metadata: Additional metadata
+    """
+    conversation = get_conversation(conversation_id)
+    if conversation is None:
+        raise ValueError(f"Conversation {conversation_id} not found")
+
+    conversation["messages"].append({
+        "role": "assistant",
+        "content": stage3["response"],
+        "stage0": {"analysis": metadata.get("intent_analysis", ""), "first_expert": first_expert},
+        "debate": debate_history,
+        "stage3": stage3,
+        "metadata": metadata or {}
+    })
+
+    save_conversation(conversation)
+

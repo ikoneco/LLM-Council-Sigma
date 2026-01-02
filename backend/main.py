@@ -1,4 +1,4 @@
-"""FastAPI backend for LLM Council."""
+"""FastAPI backend for LLM Council with sequential expert collaboration."""
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,11 +10,21 @@ import json
 import asyncio
 
 from . import storage
-from .council import run_full_council, generate_conversation_title, stage1_collect_responses, stage2_collect_rankings, stage3_synthesize_final, calculate_aggregate_rankings
+from .council import (
+    generate_conversation_title,
+    stage0_analyze_intent,
+    stage_brainstorm_experts,
+    get_expert_contribution,
+    stage_verification,
+    stage_synthesis_planning,
+    stage_editorial_guidelines,
+    stage3_synthesize_final,
+    NUM_EXPERTS
+)
+from .config import COUNCIL_MODELS
 
 app = FastAPI(title="LLM Council API")
 
-# Enable CORS for local development
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://localhost:3000"],
@@ -25,17 +35,14 @@ app.add_middleware(
 
 
 class CreateConversationRequest(BaseModel):
-    """Request to create a new conversation."""
     pass
 
 
 class SendMessageRequest(BaseModel):
-    """Request to send a message in a conversation."""
     content: str
 
 
 class ConversationMetadata(BaseModel):
-    """Conversation metadata for list view."""
     id: str
     created_at: str
     title: str
@@ -43,7 +50,6 @@ class ConversationMetadata(BaseModel):
 
 
 class Conversation(BaseModel):
-    """Full conversation with all messages."""
     id: str
     created_at: str
     title: str
@@ -52,19 +58,16 @@ class Conversation(BaseModel):
 
 @app.get("/")
 async def root():
-    """Health check endpoint."""
     return {"status": "ok", "service": "LLM Council API"}
 
 
 @app.get("/api/conversations", response_model=List[ConversationMetadata])
 async def list_conversations():
-    """List all conversations (metadata only)."""
     return storage.list_conversations()
 
 
 @app.post("/api/conversations", response_model=Conversation)
 async def create_conversation(request: CreateConversationRequest):
-    """Create a new conversation."""
     conversation_id = str(uuid.uuid4())
     conversation = storage.create_conversation(conversation_id)
     return conversation
@@ -72,128 +75,146 @@ async def create_conversation(request: CreateConversationRequest):
 
 @app.get("/api/conversations/{conversation_id}", response_model=Conversation)
 async def get_conversation(conversation_id: str):
-    """Get a specific conversation with all its messages."""
     conversation = storage.get_conversation(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation
 
 
-@app.post("/api/conversations/{conversation_id}/message")
-async def send_message(conversation_id: str, request: SendMessageRequest):
-    """
-    Send a message and run the 3-stage council process.
-    Returns the complete response with all stages.
-    """
-    # Check if conversation exists
-    conversation = storage.get_conversation(conversation_id)
-    if conversation is None:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-
-    # Check if this is the first message
-    is_first_message = len(conversation["messages"]) == 0
-
-    # Add user message
-    storage.add_user_message(conversation_id, request.content)
-
-    # If this is the first message, generate a title
-    if is_first_message:
-        title = await generate_conversation_title(request.content)
-        storage.update_conversation_title(conversation_id, title)
-
-    # Run the 3-stage council process
-    stage1_results, stage2_results, stage3_result, metadata = await run_full_council(
-        request.content
-    )
-
-    # Add assistant message with all stages
-    storage.add_assistant_message(
-        conversation_id,
-        stage1_results,
-        stage2_results,
-        stage3_result
-    )
-
-    # Return the complete response with metadata
-    return {
-        "stage1": stage1_results,
-        "stage2": stage2_results,
-        "stage3": stage3_result,
-        "metadata": metadata
-    }
+@app.delete("/api/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str):
+    try:
+        storage.delete_conversation(conversation_id)
+        return {"status": "deleted"}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @app.post("/api/conversations/{conversation_id}/message/stream")
 async def send_message_stream(conversation_id: str, request: SendMessageRequest):
-    """
-    Send a message and stream the 3-stage council process.
-    Returns Server-Sent Events as each stage completes.
-    """
-    # Check if conversation exists
+    """Send a message and stream the sequential expert collaboration process."""
     conversation = storage.get_conversation(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    # Check if this is the first message
     is_first_message = len(conversation["messages"]) == 0
 
     async def event_generator():
         try:
-            # Add user message
             storage.add_user_message(conversation_id, request.content)
 
-            # Start title generation in parallel (don't await yet)
             title_task = None
             if is_first_message:
                 title_task = asyncio.create_task(generate_conversation_title(request.content))
 
-            # Stage 1: Collect responses
-            yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
-            stage1_results = await stage1_collect_responses(request.content)
-            yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
+            # Stage 0: Analyze intent
+            yield f"data: {json.dumps({'type': 'stage0_start'})}\n\n"
+            intent_analysis = await stage0_analyze_intent(request.content)
+            yield f"data: {json.dumps({'type': 'stage0_complete', 'data': {'analysis': intent_analysis}})}\n\n"
 
-            # Stage 2: Collect rankings
-            yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
-            stage2_results, label_to_model = await stage2_collect_rankings(request.content, stage1_results)
-            aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
-            yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_model': label_to_model, 'aggregate_rankings': aggregate_rankings}})}\n\n"
+            # Stage 0.5: Brainstorm experts
+            yield f"data: {json.dumps({'type': 'brainstorm_start'})}\n\n"
+            brainstorm_content, experts = await stage_brainstorm_experts(request.content, intent_analysis)
+            yield f"data: {json.dumps({'type': 'brainstorm_complete', 'data': {'brainstorm_content': brainstorm_content, 'experts': experts}})}\n\n"
 
-            # Stage 3: Synthesize final answer
+            # Stage 1: Sequential Expert Contributions
+            yield f"data: {json.dumps({'type': 'contributions_start'})}\n\n"
+            
+            contributions = []
+            for i, expert in enumerate(experts):
+                order = expert.get('order', i + 1)
+                
+                yield f"data: {json.dumps({'type': 'expert_start', 'data': {'order': order, 'expert': expert}})}\n\n"
+                
+                contribution = await get_expert_contribution(
+                    request.content, 
+                    expert, 
+                    contributions, 
+                    order,
+                    intent_analysis
+                )
+                
+                entry = {
+                    "order": order,
+                    "expert": expert,
+                    "contribution": contribution,
+                    "model": COUNCIL_MODELS[(order - 1) % len(COUNCIL_MODELS)]
+                }
+                contributions.append(entry)
+                
+                yield f"data: {json.dumps({'type': 'expert_complete', 'data': entry})}\n\n"
+
+            yield f"data: {json.dumps({'type': 'contributions_complete', 'data': {'num_experts': len(contributions)}})}\n\n"
+
+            # Stage 2.5: Verification
+            yield f"data: {json.dumps({'type': 'verification_start'})}\n\n"
+            verification_data = await stage_verification(request.content, contributions)
+            yield f"data: {json.dumps({'type': 'verification_complete', 'data': verification_data})}\n\n"
+
+            # Stage 2.75: Synthesis Planning
+            yield f"data: {json.dumps({'type': 'planning_start'})}\n\n"
+            synthesis_plan = await stage_synthesis_planning(
+                request.content,
+                contributions,
+                intent_analysis,
+                verification_data
+            )
+            yield f"data: {json.dumps({'type': 'planning_complete', 'data': synthesis_plan})}\n\n"
+
+            # Stage 2.9: Editorial Guidelines
+            yield f"data: {json.dumps({'type': 'editorial_start'})}\n\n"
+            editorial_guidelines = await stage_editorial_guidelines(
+                request.content,
+                intent_analysis,
+                contributions,
+                synthesis_plan
+            )
+            yield f"data: {json.dumps({'type': 'editorial_complete', 'data': editorial_guidelines})}\n\n"
+
+            # Stage 3: Final Synthesis
             yield f"data: {json.dumps({'type': 'stage3_start'})}\n\n"
-            stage3_result = await stage3_synthesize_final(request.content, stage1_results, stage2_results)
+            stage3_result = await stage3_synthesize_final(
+                request.content,
+                contributions,
+                intent_analysis=intent_analysis,
+                verification_data=verification_data,
+                synthesis_plan=synthesis_plan,
+                editorial_guidelines=editorial_guidelines
+            )
             yield f"data: {json.dumps({'type': 'stage3_complete', 'data': stage3_result})}\n\n"
 
-            # Wait for title generation if it was started
             if title_task:
                 title = await title_task
                 storage.update_conversation_title(conversation_id, title)
                 yield f"data: {json.dumps({'type': 'title_complete', 'data': {'title': title}})}\n\n"
 
-            # Save complete assistant message
-            storage.add_assistant_message(
+            metadata = {
+                "intent_analysis": intent_analysis,
+                "verification_data": verification_data,
+                "synthesis_plan": synthesis_plan,
+                "editorial_guidelines": editorial_guidelines,
+                "num_experts": len(contributions)
+            }
+            storage.add_assistant_message_debate(
                 conversation_id,
-                stage1_results,
-                stage2_results,
-                stage3_result
+                experts,
+                contributions,
+                stage3_result,
+                metadata
             )
 
-            # Send completion event
             yield f"data: {json.dumps({'type': 'complete'})}\n\n"
 
         except Exception as e:
-            # Send error event
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-        }
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
     )
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=8001, reload=True)
