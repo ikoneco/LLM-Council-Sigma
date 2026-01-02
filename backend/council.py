@@ -3,9 +3,34 @@
 from typing import List, Dict, Any, Tuple, Optional
 import asyncio
 from .openrouter import query_model
-from .config import COUNCIL_MODELS, CHAIRMAN_MODEL
+from .config import COUNCIL_MODELS, CHAIRMAN_MODEL, MIN_EXPERT_MODELS
 
-NUM_EXPERTS = 6
+DEFAULT_NUM_EXPERTS = MIN_EXPERT_MODELS
+
+
+def build_default_experts(num_experts: int) -> List[Dict[str, Any]]:
+    """Build a fallback expert list sized to the requested expert count."""
+    base_experts = [
+        {"name": "Strategic Analyst", "description": "Task: Set strategic direction. Objective: Define approach.", "objectives": ["Define strategy"], "order": 1},
+        {"name": "Technical Architect", "description": "Task: Technical foundation. Objective: Ensure feasibility.", "objectives": ["Ensure feasibility"], "order": 2},
+        {"name": "Domain Specialist", "description": "Task: Domain expertise. Objective: Add depth.", "objectives": ["Add domain depth"], "order": 3},
+        {"name": "Implementation Expert", "description": "Task: Practical application. Objective: Actionable guidance.", "objectives": ["Provide guidance"], "order": 4},
+        {"name": "Risk Analyst", "description": "Task: Identify risks. Objective: Surface concerns.", "objectives": ["Identify risks"], "order": 5},
+        {"name": "Quality Reviewer", "description": "Task: Critical review. Objective: Ensure completeness.", "objectives": ["Ensure quality"], "order": 6},
+    ]
+
+    if num_experts <= len(base_experts):
+        return base_experts[:num_experts]
+
+    extras = []
+    for i in range(len(base_experts) + 1, num_experts + 1):
+        extras.append({
+            "name": f"Expert {i}",
+            "description": "Task: Provide complementary analysis. Objective: Strengthen coverage.",
+            "objectives": ["Add complementary depth"],
+            "order": i,
+        })
+    return base_experts + extras
 
 
 def format_conversation_history(history: List[Dict[str, Any]]) -> str:
@@ -91,7 +116,14 @@ Provide your deep intent analysis now:"""
     return response.get('content', 'Analyzing query requirements...')
 
 
-async def stage_brainstorm_experts(user_query: str, intent_analysis: str, history: List[Dict[str, Any]] = None) -> Tuple[str, List[Dict[str, str]]]:
+async def stage_brainstorm_experts(
+    user_query: str,
+    intent_analysis: str,
+    history: List[Dict[str, Any]] = None,
+    expert_models: Optional[List[str]] = None,
+    chairman_model: Optional[str] = None,
+    num_experts: int = DEFAULT_NUM_EXPERTS,
+) -> Tuple[str, List[Dict[str, str]]]:
     """
     Stage 0.5: All models brainstorm to define experts.
     Each model suggests experts, then chairman synthesizes final team.
@@ -141,11 +173,14 @@ Provide 2-3 expert suggestions in this format:
 
 Provide your expert suggestions now:"""
 
+    models = expert_models or COUNCIL_MODELS
+    chairman = chairman_model or CHAIRMAN_MODEL
+
     # Collect brainstorm from all models in parallel
     import asyncio
     tasks = [
         query_model(model, [{"role": "user", "content": brainstorm_prompt}])
-        for model in COUNCIL_MODELS
+        for model in models
     ]
     responses = await asyncio.gather(*tasks, return_exceptions=True)
     
@@ -154,7 +189,7 @@ Provide your expert suggestions now:"""
     all_suggestions_for_synthesis = []
     
     for i, resp in enumerate(responses):
-        model_name = COUNCIL_MODELS[i].split('/')[-1]  # Get short model name
+        model_name = models[i].split('/')[-1]  # Get short model name
         if isinstance(resp, Exception) or resp is None:
             brainstorm_sections.append(f"### 🤖 {model_name}\n*Failed to respond*\n")
             continue
@@ -167,7 +202,7 @@ Provide your expert suggestions now:"""
     # Chairman synthesizes the final expert team
     synthesis_prompt = f"""<task>
 You are the Chairman forming the FINAL expert team from brainstorm suggestions.
-Create a team of {NUM_EXPERTS} HIGHLY RELEVANT experts with SPECIFIC roles aligned to this query.
+Create a team of {num_experts} HIGHLY RELEVANT experts with SPECIFIC roles aligned to this query.
 </task>
 
 <user_query>{user_query}</user_query>
@@ -182,7 +217,7 @@ Create a team of {NUM_EXPERTS} HIGHLY RELEVANT experts with SPECIFIC roles align
 </brainstorm_suggestions>
 
 <team_formation_requirements>
-1. Select EXACTLY {NUM_EXPERTS} experts
+1. Select EXACTLY {num_experts} experts
 2. Each expert MUST have:
    - A SPECIFIC role title (not generic like "Domain Expert")
    - A DETAILED task description (50+ words explaining what they will do)
@@ -209,7 +244,7 @@ Respond with a valid JSON object ONLY:
             "objectives": ["Goal 1", "Goal 2"],
             "order": 2
         }},
-        ... (continue for all {NUM_EXPERTS} experts)
+        ... (continue for all {num_experts} experts)
     ]
 }}
 </output_format>
@@ -217,16 +252,9 @@ Respond with a valid JSON object ONLY:
 Create the optimal expert team now:"""
 
     messages = [{"role": "user", "content": synthesis_prompt}]
-    response = await query_model(CHAIRMAN_MODEL, messages)
+    response = await query_model(chairman, messages)
     
-    default_experts = [
-        {"name": "Strategic Analyst", "description": "Task: Set strategic direction. Objective: Define approach.", "objectives": ["Define strategy"], "order": 1},
-        {"name": "Technical Architect", "description": "Task: Technical foundation. Objective: Ensure feasibility.", "objectives": ["Ensure feasibility"], "order": 2},
-        {"name": "Domain Specialist", "description": "Task: Domain expertise. Objective: Add depth.", "objectives": ["Add domain depth"], "order": 3},
-        {"name": "Implementation Expert", "description": "Task: Practical application. Objective: Actionable guidance.", "objectives": ["Provide guidance"], "order": 4},
-        {"name": "Risk Analyst", "description": "Task: Identify risks. Objective: Surface concerns.", "objectives": ["Identify risks"], "order": 5},
-        {"name": "Quality Reviewer", "description": "Task: Critical review. Objective: Ensure completeness.", "objectives": ["Ensure quality"], "order": 6}
-    ]
+    default_experts = build_default_experts(num_experts)
     
     if response is None:
         return brainstorm_display, default_experts
@@ -250,7 +278,7 @@ Create the optimal expert team now:"""
             rationale = data.get("team_rationale", "")
             
             normalized = []
-            for i, e in enumerate(experts[:NUM_EXPERTS]):
+            for i, e in enumerate(experts[:num_experts]):
                 # Be flexible with key names
                 role = e.get("role") or e.get("name") or e.get("title") or f"Expert {i+1}"
                 task = e.get("task") or e.get("description") or e.get("details") or "Contribute expertise"
@@ -267,7 +295,7 @@ Create the optimal expert team now:"""
                     "order": e.get("order", i + 1)
                 })
             
-            while len(normalized) < NUM_EXPERTS:
+            while len(normalized) < num_experts:
                 normalized.append(default_experts[len(normalized)])
             
             # Append team rationale to brainstorm display
@@ -287,7 +315,9 @@ async def get_expert_contribution(
     contributions: List[Dict[str, Any]], 
     order: int,
     intent_analysis: str,
-    history: List[Dict[str, Any]] = None
+    history: List[Dict[str, Any]] = None,
+    expert_models: Optional[List[str]] = None,
+    num_experts: int = DEFAULT_NUM_EXPERTS,
 ) -> str:
     """
     Get a contribution from an expert, building on previous work with rigorous quality focus.
@@ -305,7 +335,7 @@ async def get_expert_contribution(
 </prior_contributions>
 
 <your_role>
-You are Expert {order} of {NUM_EXPERTS}. Your job is to CRITICALLY REVIEW and then BUILD UPON the prior work.
+You are Expert {order} of {num_experts}. Your job is to CRITICALLY REVIEW and then BUILD UPON the prior work.
 Your unique mandate: {expert['description']}
 </your_role>
 
@@ -319,7 +349,7 @@ Before adding your contribution, you MUST:
 </quality_review_requirements>"""
     else:
         context_section = f"""<your_role>
-You are Expert {order} of {NUM_EXPERTS}. You are the FIRST expert laying the FOUNDATION.
+You are Expert {order} of {num_experts}. You are the FIRST expert laying the FOUNDATION.
 Subsequent experts will review your work for errors and build upon it, so be rigorous.
 Your mandate: {expert['description']}
 </your_role>
@@ -332,7 +362,8 @@ As the first expert, you MUST:
 4. **Anticipate Gaps**: Acknowledge areas that need further expertise.
 </foundation_requirements>"""
     
-    model = COUNCIL_MODELS[(order - 1) % len(COUNCIL_MODELS)]
+    models = expert_models or COUNCIL_MODELS
+    model = models[(order - 1) % len(models)]
     
     expert_prompt = f"""<system>You are {expert['name']}, a world-class professional contributing to a rigorous collaborative process.</system>
 
@@ -389,7 +420,9 @@ async def stage1_sequential_contributions(
     user_query: str, 
     experts: List[Dict[str, str]],
     intent_analysis: str,
-    history: List[Dict[str, Any]] = None
+    history: List[Dict[str, Any]] = None,
+    expert_models: Optional[List[str]] = None,
+    num_experts: int = DEFAULT_NUM_EXPERTS,
 ) -> List[Dict[str, Any]]:
     """
     Stage 1: Sequential expert contributions.
@@ -406,14 +439,16 @@ async def stage1_sequential_contributions(
             contributions, 
             order,
             intent_analysis,
-            history
+            history,
+            expert_models=expert_models,
+            num_experts=num_experts,
         )
         
         contributions.append({
             "order": order,
             "expert": expert,
             "contribution": contribution,
-            "model": COUNCIL_MODELS[(order - 1) % len(COUNCIL_MODELS)]
+            "model": (expert_models or COUNCIL_MODELS)[(order - 1) % len(expert_models or COUNCIL_MODELS)]
         })
     
     return contributions
@@ -424,7 +459,7 @@ async def stage_verification(
         contributions: List[Dict[str, Any]],
         history: List[Dict[str, Any]] = None
 ) -> str:
-    """Stage 2.5: Verify key claims using simple web search context."""
+    """Stage 2.5: Verify claims and audit reasoning across all contributions."""
     context_str = format_conversation_history(history or [])
     context_section = f"\n<conversation_context>\n{context_str}\n</conversation_context>" if context_str else ""
     
@@ -435,7 +470,7 @@ async def stage_verification(
     
     # 1. Generate Search Queries
     query_gen_prompt = f"""<task>
-You are a Fact-Check Strategist dedicated to eliminating hallucinations. 
+You are a Fact-Check Strategist dedicated to eliminating hallucinations and weak reasoning.
 Review the expert contributions and flag specific data points that are prone to hallucination (e.g., pricing, release dates, version numbers, technical specs).
 Generate EXACTLY 3 targeted web search queries to rigorously verify these high-risk claims.
 </task>
@@ -518,8 +553,8 @@ Use the Search Evidence to VALIDATE or DEBUNK the claims.
 """
 
     verification_prompt = f"""<task>
-You are a Meticulous Fact-Checker. Verify the expert contributions against the provided Search Evidence (if available) and your own knowledge.
-Focus on accurate numbers, dates, pricing, and technical facts.
+You are a Meticulous Fact-Checker AND Reasoning Auditor. Verify the expert contributions against the provided Search Evidence (if available) and your own knowledge.
+Focus on accurate numbers, dates, pricing, and technical facts, AND identify reasoning issues: logical flaws, gaps, inconsistencies, and unsupported assumptions.
 </task>
 
 <user_query>{user_query}</user_query>
@@ -532,28 +567,31 @@ Focus on accurate numbers, dates, pricing, and technical facts.
 {evidence_section}
 
 <output_format>
-## Factual Verification Report
+## Verification & Reasoning Audit
 
-### Claim 1: [Statement]
-- **Verdict**: Verified / Partially Accurate / Incorrect
-- **Corrective Information**: [Accurate facts from search. CITE SOURCE: [Name](URL)]
-- **Reasoning**: [Explain conflict or gap]
-- **Source Reliability**: [High/Medium/Low]
+### Finding 1: [Claim or Reasoning Issue]
+- **Type**: Factual / Logical / Inconsistency / Gap / Assumption
+- **Verdict**: Verified / Partially Accurate / Incorrect / Needs Clarification
+- **Corrective Information**: [Accurate facts from search or corrected logic. CITE SOURCE if factual: [Name](URL)]
+- **Reasoning**: [Explain conflict, gap, or flawed logic]
+- **Source Reliability**: [High/Medium/Low/N-A]
 
-### Claim 2: [Statement]
+### Finding 2: [Claim or Reasoning Issue]
+- **Type**: ...
 - **Verdict**: ...
 - **Corrective Information**: ...
 - **Reasoning**: ...
 - **Source Reliability**: ...
 
-### Claim 3: [Statement]
+### Finding 3: [Claim or Reasoning Issue]
+- **Type**: ...
 - **Verdict**: ...
 - **Corrective Information**: ...
 - **Reasoning**: ...
 - **Source Reliability**: ...
 </output_format>
 
-Provide your verification report now:"""
+Provide your verification report now. Include both factual and reasoning issues:"""
 
     messages = [{"role": "user", "content": verification_prompt}]
     response = await query_model("google/gemini-2.0-flash-001", messages)
@@ -713,7 +751,8 @@ async def stage3_synthesize_final(
     verification_data: str = "",
     synthesis_plan: str = "",
     editorial_guidelines: str = "",
-    history: List[Dict[str, Any]] = None
+    history: List[Dict[str, Any]] = None,
+    chairman_model: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Stage 3: Chairman synthesizes all contributions following the plan and editorial guidelines."""
     context_str = format_conversation_history(history or [])
@@ -763,7 +802,8 @@ You MUST:
 4. **Match the recommended structure** from the plan
 5. **Satisfy ALL Quality Checkpoints**
 6. **Meet the Quality Bar** defined in editorial guidelines
-7. **STRICTLY ADHERE TO VERIFICATION**: Use the <verification_report> to filter untrue claims. If a claim is marked 'Incorrect', exclude it. If 'Partially Accurate', provide nuance. Do not hallucinate data.
+7. **STRICTLY ADHERE TO VERIFICATION**: Use the <verification_report> to filter untrue claims and fix reasoning flaws. If a finding is 'Incorrect', exclude or correct it. If 'Needs Clarification', add the missing context. Do not hallucinate data.
+8. **INTEGRATE ALL EXPERTS**: Explicitly incorporate or reject EACH expert contribution based on the verification report and synthesis plan.
 </chairman_mandate>
 
 <synthesis_protocol>
@@ -771,7 +811,8 @@ You MUST:
 2. **Comprehensive Coverage**: Address every dimension of user intent.
 3. **Follow Editorial Voice**: Match the tone and style guidelines exactly.
 4. **Evidence-Based**: Support claims with reasoning and data.
-5. **Actionable Conclusion**: End with clear, specific next steps.
+5. **Contribution Reconciliation**: Resolve conflicts between experts and explain tradeoffs when they matter.
+6. **Actionable Conclusion**: End with clear, specific next steps.
 </synthesis_protocol>
 
 <quality_standards>
@@ -789,8 +830,9 @@ Provide the final TOP QUALITY synthesized artifact now:"""
         {"role": "system", "content": "You are the master synthesizer. Follow both the synthesis plan AND editorial guidelines precisely."},
         {"role": "user", "content": chairman_prompt}
     ]
-    response = await query_model(CHAIRMAN_MODEL, messages)
-    return {"model": CHAIRMAN_MODEL, "response": response.get('content', 'Error: Synthesis failed.') if response else "Error: Synthesis failed."}
+    chairman = chairman_model or CHAIRMAN_MODEL
+    response = await query_model(chairman, messages)
+    return {"model": chairman, "response": response.get('content', 'Error: Synthesis failed.') if response else "Error: Synthesis failed."}
 
 
 async def generate_conversation_title(user_query: str) -> str:
@@ -807,7 +849,13 @@ Title:"""
     return title[:47] + "..." if len(title) > 50 else title
 
 
-async def run_full_council(user_query: str, history: List[Dict[str, Any]] = None) -> Tuple[str, List, List, str, str, str, Dict, Dict]:
+async def run_full_council(
+    user_query: str,
+    history: List[Dict[str, Any]] = None,
+    expert_models: Optional[List[str]] = None,
+    chairman_model: Optional[str] = None,
+    num_experts: Optional[int] = None,
+) -> Tuple[str, List, List, str, str, str, Dict, Dict]:
     """
     Run the complete sequential expert collaboration process.
     
@@ -817,11 +865,28 @@ async def run_full_council(user_query: str, history: List[Dict[str, Any]] = None
     # Stage 0: Analyze intent
     intent_analysis = await stage0_analyze_intent(user_query, history)
     
+    models = expert_models or COUNCIL_MODELS
+    expert_count = num_experts or (len(models) if expert_models else DEFAULT_NUM_EXPERTS)
+
     # Stage 0.5: Brainstorm and form expert team
-    brainstorm_content, experts = await stage_brainstorm_experts(user_query, intent_analysis, history)
+    brainstorm_content, experts = await stage_brainstorm_experts(
+        user_query,
+        intent_analysis,
+        history,
+        expert_models=models,
+        chairman_model=chairman_model,
+        num_experts=expert_count,
+    )
     
     # Stage 1: Sequential expert contributions
-    contributions = await stage1_sequential_contributions(user_query, experts, intent_analysis, history)
+    contributions = await stage1_sequential_contributions(
+        user_query,
+        experts,
+        intent_analysis,
+        history,
+        expert_models=models,
+        num_experts=expert_count,
+    )
     
     if not contributions:
         return intent_analysis, experts, [], "", "", "", {
@@ -858,7 +923,8 @@ async def run_full_council(user_query: str, history: List[Dict[str, Any]] = None
         verification_data=verification_data,
         synthesis_plan=synthesis_plan,
         editorial_guidelines=editorial_guidelines,
-        history=history
+        history=history,
+        chairman_model=chairman_model,
     )
     
     metadata = {

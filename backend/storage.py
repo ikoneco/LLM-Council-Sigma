@@ -187,18 +187,18 @@ def delete_conversation(conversation_id: str):
 
 def add_assistant_message_debate(
     conversation_id: str,
-    first_expert: Dict[str, Any],
-    debate_history: List[Dict[str, Any]],
+    experts: List[Dict[str, Any]],
+    contributions: List[Dict[str, Any]],
     stage3: Dict[str, Any],
     metadata: Dict[str, Any] = None
 ):
     """
-    Add an assistant message with sequential debate data to a conversation.
+    Add an assistant message with sequential contribution data to a conversation.
     
     Args:
         conversation_id: Conversation identifier
-        first_expert: The first expert selected in Stage 0
-        debate_history: List of debate entries (4 generations)
+        experts: Expert team selected in Stage 0.5
+        contributions: List of expert contributions
         stage3: Final synthesis result
         metadata: Additional metadata
     """
@@ -206,14 +206,17 @@ def add_assistant_message_debate(
     if conversation is None:
         raise ValueError(f"Conversation {conversation_id} not found")
 
+    safe_metadata = metadata or {}
+
     conversation["messages"].append({
         "role": "assistant",
         "content": stage3["response"],
-        "stage0": {"analysis": metadata.get("intent_analysis", ""), "first_expert": first_expert},
-        "debate": debate_history,
+        "stage0": {"analysis": safe_metadata.get("intent_analysis", "")},
+        "experts": experts,
+        "contributions": contributions,
+        "debate": contributions,
         "stage3": stage3,
-        "metadata": metadata or {}
+        "metadata": safe_metadata
     })
 
     save_conversation(conversation)
-

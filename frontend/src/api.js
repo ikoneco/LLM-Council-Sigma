@@ -17,6 +17,17 @@ export const api = {
   },
 
   /**
+   * Fetch available models and defaults.
+   */
+  async getModels() {
+    const response = await fetch(`${API_BASE}/api/models`);
+    if (!response.ok) {
+      throw new Error('Failed to load models');
+    }
+    return response.json();
+  },
+
+  /**
    * Create a new conversation.
    */
   async createConversation() {
@@ -65,7 +76,7 @@ export const api = {
   /**
    * Send a message in a conversation.
    */
-  async sendMessage(conversationId, content) {
+  async sendMessage(conversationId, content, modelSelection) {
     const response = await fetch(
       `${API_BASE}/api/conversations/${conversationId}/message`,
       {
@@ -73,7 +84,7 @@ export const api = {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content, model_selection: modelSelection }),
       }
     );
     if (!response.ok) {
@@ -89,7 +100,14 @@ export const api = {
    * @param {function} onEvent - Callback function for each event: (eventType, data) => void
    * @returns {Promise<void>}
    */
-  async sendMessageStream(conversationId, content, onEvent) {
+  async sendMessageStream(conversationId, content, onEvent, modelSelection) {
+    const payload = {
+      content,
+    };
+    if (modelSelection) {
+      payload.model_selection = modelSelection;
+    }
+
     const response = await fetch(
       `${API_BASE}/api/conversations/${conversationId}/message/stream`,
       {
@@ -97,7 +115,7 @@ export const api = {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify(payload),
       }
     );
 

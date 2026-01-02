@@ -1,0 +1,110 @@
+.model-selector {
+  width: 100%;
+  max-width: 800px;
+  background: #FFFFFF;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.model-selector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.model-selector-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.model-selector-count {
+  font-size: 0.72rem;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-highlight);
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.model-selector-count.ok {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.model-selector-count.error {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+}
+
+.model-selector-body {
+  display: grid;
+  gap: 16px;
+}
+
+.model-selector-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.model-selector-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-sub);
+}
+
+.model-selector select {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: var(--font-base);
+  font-size: 0.95rem;
+  background: var(--color-surface);
+  color: var(--color-text-main);
+}
+
+.model-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.model-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  color: var(--color-text-sub);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.model-option input {
+  accent-color: var(--color-primary);
+}
+
+.model-option.selected {
+  border-color: var(--color-primary);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+  color: var(--color-text-main);
+}
+
+.model-option-name {
+  line-height: 1.2;
+}
+
+.model-selector-hint {
+  font-size: 0.8rem;
+  color: var(--color-error);
+}

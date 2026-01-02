@@ -9,6 +9,7 @@ function App() {
   const [currentConversationId, setCurrentConversationId] = useState(null);
   const [currentConversation, setCurrentConversation] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [modelCatalog, setModelCatalog] = useState(null);
 
   const loadConversations = async () => {
     try {
@@ -30,6 +31,19 @@ function App() {
 
   useEffect(() => {
     loadConversations();
+  }, []);
+
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        const catalog = await api.getModels();
+        setModelCatalog(catalog);
+      } catch (error) {
+        console.error('Failed to load models:', error);
+      }
+    };
+
+    loadModels();
   }, []);
 
   useEffect(() => {
@@ -68,7 +82,7 @@ function App() {
     setCurrentConversationId(id);
   };
 
-  const handleSendMessage = async (content) => {
+  const handleSendMessage = async (content, modelSelection) => {
     if (!currentConversationId) return;
 
     setIsLoading(true);
@@ -86,7 +100,7 @@ function App() {
         experts: null,
         contributions: [],
         stage3: null,
-        metadata: null,
+        metadata: modelSelection ? { model_selection: modelSelection } : {},
         loading: {
           stage0: false,
           brainstorm: false,
@@ -210,7 +224,7 @@ function App() {
               const messages = [...prev.messages];
               const lastMsg = {
                 ...messages[messages.length - 1],
-                metadata: { ...messages[messages.length - 1].metadata, verification_data: event.data },
+                metadata: { ...(messages[messages.length - 1].metadata || {}), verification_data: event.data },
                 loading: { ...messages[messages.length - 1].loading, verification: false }
               };
               messages[messages.length - 1] = lastMsg;
@@ -232,7 +246,7 @@ function App() {
               const messages = [...prev.messages];
               const lastMsg = {
                 ...messages[messages.length - 1],
-                metadata: { ...messages[messages.length - 1].metadata, synthesis_plan: event.data },
+                metadata: { ...(messages[messages.length - 1].metadata || {}), synthesis_plan: event.data },
                 loading: { ...messages[messages.length - 1].loading, planning: false }
               };
               messages[messages.length - 1] = lastMsg;
@@ -254,7 +268,7 @@ function App() {
               const messages = [...prev.messages];
               const lastMsg = {
                 ...messages[messages.length - 1],
-                metadata: { ...messages[messages.length - 1].metadata, editorial_guidelines: event.data },
+                metadata: { ...(messages[messages.length - 1].metadata || {}), editorial_guidelines: event.data },
                 loading: { ...messages[messages.length - 1].loading, editorial: false }
               };
               messages[messages.length - 1] = lastMsg;
@@ -301,7 +315,7 @@ function App() {
           default:
             console.log('Unknown event type:', eventType);
         }
-      });
+      }, modelSelection);
     } catch (error) {
       console.error('Failed to send message:', error);
       setCurrentConversation((prev) => ({
@@ -326,6 +340,7 @@ function App() {
         onSendMessage={handleSendMessage}
         onNewConversation={handleNewConversation}
         isLoading={isLoading}
+        modelCatalog={modelCatalog}
       />
     </div>
   );

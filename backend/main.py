@@ -4,7 +4,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Tuple
 import uuid
 import json
 import asyncio
@@ -19,9 +19,8 @@ from .council import (
     stage_synthesis_planning,
     stage_editorial_guidelines,
     stage3_synthesize_final,
-    NUM_EXPERTS
 )
-from .config import COUNCIL_MODELS
+from .config import AVAILABLE_MODELS, COUNCIL_MODELS, CHAIRMAN_MODEL, MIN_EXPERT_MODELS
 
 app = FastAPI(title="LLM Council API")
 
@@ -38,8 +37,14 @@ class CreateConversationRequest(BaseModel):
     pass
 
 
+class ModelSelection(BaseModel):
+    chairman_model: str
+    expert_models: List[str]
+
+
 class SendMessageRequest(BaseModel):
     content: str
+    model_selection: Optional[ModelSelection] = None
 
 
 class ConversationMetadata(BaseModel):
@@ -56,9 +61,52 @@ class Conversation(BaseModel):
     messages: List[Dict[str, Any]]
 
 
+def normalize_model_selection(selection: Optional[ModelSelection]) -> Tuple[str, List[str]]:
+    if selection is None:
+        return CHAIRMAN_MODEL, COUNCIL_MODELS
+
+    available = set(AVAILABLE_MODELS)
+
+    if selection.chairman_model not in available:
+        raise HTTPException(status_code=400, detail="Invalid chairman model selection")
+
+    seen = set()
+    expert_models = []
+    invalid_models = []
+    for model in selection.expert_models:
+        if model not in available:
+            invalid_models.append(model)
+            continue
+        if model in seen:
+            continue
+        seen.add(model)
+        expert_models.append(model)
+
+    if invalid_models:
+        raise HTTPException(status_code=400, detail="Invalid expert model selection")
+
+    if len(expert_models) < MIN_EXPERT_MODELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Select at least {MIN_EXPERT_MODELS} expert models",
+        )
+
+    return selection.chairman_model, expert_models
+
+
 @app.get("/")
 async def root():
     return {"status": "ok", "service": "LLM Council API"}
+
+
+@app.get("/api/models")
+async def list_models():
+    return {
+        "available_models": AVAILABLE_MODELS,
+        "default_expert_models": COUNCIL_MODELS,
+        "default_chairman_model": CHAIRMAN_MODEL,
+        "min_expert_models": MIN_EXPERT_MODELS,
+    }
 
 
 @app.get("/api/conversations", response_model=List[ConversationMetadata])
@@ -98,6 +146,12 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     is_first_message = len(conversation["messages"]) == 0
+    chairman_model, expert_models = normalize_model_selection(request.model_selection)
+    num_experts = len(expert_models)
+    model_selection = {
+        "chairman_model": chairman_model,
+        "expert_models": expert_models,
+    }
 
     async def event_generator():
         try:
@@ -117,7 +171,14 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
 
             # Stage 0.5: Brainstorm experts
             yield f"data: {json.dumps({'type': 'brainstorm_start'})}\n\n"
-            brainstorm_content, experts = await stage_brainstorm_experts(request.content, intent_analysis, history)
+            brainstorm_content, experts = await stage_brainstorm_experts(
+                request.content,
+                intent_analysis,
+                history,
+                expert_models=expert_models,
+                chairman_model=chairman_model,
+                num_experts=num_experts,
+            )
             yield f"data: {json.dumps({'type': 'brainstorm_complete', 'data': {'brainstorm_content': brainstorm_content, 'experts': experts}})}\n\n"
 
             # Stage 1: Sequential Expert Contributions
@@ -135,14 +196,16 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
                     contributions, 
                     order,
                     intent_analysis,
-                    history
+                    history,
+                    expert_models=expert_models,
+                    num_experts=num_experts,
                 )
                 
                 entry = {
                     "order": order,
                     "expert": expert,
                     "contribution": contribution,
-                    "model": COUNCIL_MODELS[(order - 1) % len(COUNCIL_MODELS)]
+                    "model": expert_models[(order - 1) % len(expert_models)]
                 }
                 contributions.append(entry)
                 
@@ -186,7 +249,8 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
                 verification_data=verification_data,
                 synthesis_plan=synthesis_plan,
                 editorial_guidelines=editorial_guidelines,
-                history=history
+                history=history,
+                chairman_model=chairman_model,
             )
             yield f"data: {json.dumps({'type': 'stage3_complete', 'data': stage3_result})}\n\n"
 
@@ -200,7 +264,8 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
                 "verification_data": verification_data,
                 "synthesis_plan": synthesis_plan,
                 "editorial_guidelines": editorial_guidelines,
-                "num_experts": len(contributions)
+                "num_experts": len(contributions),
+                "model_selection": model_selection,
             }
             storage.add_assistant_message_debate(
                 conversation_id,

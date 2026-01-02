@@ -1,13 +1,14 @@
 # 🧠 LLM Council
 
-**LLM Council** is a sophisticated multi-agent orchestration system that simulates a "council of experts" to solve complex user queries. Instead of a single zero-shot response, it employs a rigorous 7-stage pipeline where dynamic expert personas analyze, brainstorm, contribute, verify, and synthesize a high-quality final artifact.
+**LLM Council** is a sophisticated multi-agent orchestration system that simulates a "council of experts" to solve complex user queries. Instead of a single zero-shot response, it employs a rigorous multi-stage pipeline where users select the models and dynamic expert personas analyze, brainstorm, contribute, verify, and synthesize a high-quality final artifact.
 
 ## ✨ Key Features
 
 - **Multi-Stage Orchestration**: Moves beyond simple prompting to a state-managed workflow.
+- **Model Selection**: Users choose the Chairman model and a pool of expert models (minimum 6 of 8).
 - **Dynamic Expert Selection**: Automatically identifies the specialized roles needed (e.g., "Senior Product Strategist", "Security Architect") based on the query.
 - **Sequential Collaboration**: Experts build upon each other's work, providing deep, layered insights.
-- **Factual Verification**: A dedicated stage checks claims against logic and knowledge bases.
+- **Verification & Reasoning Audit**: A dedicated stage checks claims, logic, gaps, and inconsistencies.
 - **Editorial Synthesis**: A final "Chairman" synthesizes all contributions into a cohesive, style-calibrated response (Editorial/Council voice).
 - **Google-Quality UX**: A clean, elegant, and accessible interface featuring:
   - **Smart Iconography**: Dynamic detection of header context (Intent, Claim, Strategy) to display relevant Lucide icons.
@@ -16,6 +17,7 @@
 
 ## 🔄 The Council Workflow
 
+0. **Model Selection**: Choose the Chairman model and a pool of expert models (minimum 6).
 1. **🎯 Intent Analysis**: The "Master Intent Architect" decodes the explicit and implicit goals of the user.
 2. **🧠 Expert Brainstorm**: Multiple models propose the ideal team of experts.
 3. **👥 Sequential Contributions**: Selected experts (simulated by LLMs) contribute linearly, reviewing and building on prior work.
@@ -38,10 +40,10 @@
 - **Runtime**: Python 3.10+
 - **Framework**: FastAPI + Uvicorn
 - **Orchestration**: Custom async pipeline handling SSE (Server-Sent Events)
-- **AI Provider**: OpenRouter (Gemini 2.0 Flash, etc.)
+- **AI Provider**: OpenRouter (Minimax, DeepSeek, Qwen, Z-AI GLM, Kimi, GPT-5.2, Gemini 3 Flash Preview)
 - **Package Manager**: `uv`
 
-## � Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -106,7 +108,7 @@ Council/
 │   └── openrouter.py    # API client
 ├── frontend/
 │   ├── src/
-│   │   ├── components/  # Stage components (Stage0, Stage3, ChatInterface)
+│   │   ├── components/  # Stage components + ModelSelector
 │   │   ├── App.jsx      # Main state & SSE handling
 │   │   └── index.css    # Global design system
 │   └── package.json

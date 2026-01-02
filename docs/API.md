@@ -8,7 +8,24 @@ All API requests (except GET) expect `Content-Type: application/json`.
 
 ## Endpoints
 
-### 1. List Conversations
+### 1. List Models
+
+Retrieve the available models and default selections.
+
+- **URL**: `/api/models`
+- **Method**: `GET`
+- **Response**: `200 OK`
+
+  ```json
+  {
+    "available_models": ["model-a", "model-b"],
+    "default_expert_models": ["model-a", "model-b"],
+    "default_chairman_model": "model-a",
+    "min_expert_models": 6
+  }
+  ```
+
+### 2. List Conversations
 
 Retrieve a summary list of all existing conversations.
 
@@ -27,7 +44,7 @@ Retrieve a summary list of all existing conversations.
   ]
   ```
 
-### 2. Create Conversation
+### 3. Create Conversation
 
 Start a new empty conversation session.
 
@@ -45,7 +62,7 @@ Start a new empty conversation session.
   }
   ```
 
-### 3. Get Conversation Details
+### 4. Get Conversation Details
 
 Retrieve the full message history and metadata for a specific conversation.
 
@@ -64,16 +81,23 @@ Retrieve the full message history and metadata for a specific conversation.
       {
         "role": "assistant",
         "stage0": {...},
+        "experts": [...],
         "contributions": [...],
-        "stage3": {...}
+        "stage3": {...},
+        "metadata": {
+          "model_selection": {
+            "chairman_model": "minimax/minimax-m2.1",
+            "expert_models": ["..."]
+          }
+        }
       }
     ]
   }
   ```
 
-### 4. Send Message (Stream)
+### 5. Send Message (Stream)
 
-Send a user query and receive the streaming 7-stage execution process.
+Send a user query and receive the streaming multi-stage execution process.
 
 - **URL**: `/api/conversations/{conversation_id}/message/stream`
 - **Method**: `POST`
@@ -81,9 +105,24 @@ Send a user query and receive the streaming 7-stage execution process.
 
   ```json
   {
-    "content": "Explain quantum computing to a 5 year old"
+    "content": "Explain quantum computing to a 5 year old",
+    "model_selection": {
+      "chairman_model": "minimax/minimax-m2.1",
+      "expert_models": [
+        "minimax/minimax-m2.1",
+        "deepseek/deepseek-v3.2",
+        "qwen/qwen2.5-vl-72b-instruct",
+        "z-ai/glm-4.7",
+        "moonshotai/kimi-k2-0905",
+        "qwen/qwen3-235b-a22b-2507"
+      ]
+    }
   }
   ```
+
+  Notes:
+  - `model_selection` is optional; defaults apply if omitted.
+  - `expert_models` must include at least 6 valid models.
 
 - **Response**: `text/event-stream`
   
@@ -101,7 +140,7 @@ Send a user query and receive the streaming 7-stage execution process.
   - `complete`: Stream finished
   - `error`: Stream failed
 
-### 5. Delete Conversation
+### 6. Delete Conversation
 
 Permanently remove a conversation and its data.
 

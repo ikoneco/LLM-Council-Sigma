@@ -170,10 +170,21 @@
   padding: 24px;
   background: linear-gradient(to top, rgba(255, 255, 255, 0.95) 70%, rgba(255, 255, 255, 0));
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
   position: sticky;
   bottom: 0;
   z-index: 100;
+}
+
+.input-stack {
+  width: 100%;
+  max-width: 800px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
 }
 
 .input-form {
@@ -322,4 +333,59 @@
 
 .styled-link:hover {
   opacity: 0.8;
+}
+
+.model-selection-stage {
+  background: #FFFFFF;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 32px;
+  box-shadow: var(--shadow-sm);
+  margin: 24px 0;
+  position: relative;
+}
+
+.model-selection-stage::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #0F52BA, #8AB4F8);
+}
+
+.model-selection-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.model-selection-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.model-selection-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.model-selection-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.model-selection-pill {
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-highlight);
+  font-size: 0.85rem;
+  color: var(--color-text-sub);
 }

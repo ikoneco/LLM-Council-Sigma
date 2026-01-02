@@ -5,7 +5,7 @@
 
 ## 1. Project Overview
 
-**LLM Council** is an advanced diverse-intelligence orchestration system that solves complex user queries by assembling a custom team of LLM experts. Unlike standard chat interfaces, it uses a **7-Stage Sequential Collaboration Pipeline** where agents specifically brainstorm, contribute, verify, plan, and synthesize a final artifact.
+**LLM Council** is an advanced diverse-intelligence orchestration system that solves complex user queries by assembling a custom team of LLM experts. Unlike standard chat interfaces, it uses a **7-Stage Sequential Collaboration Pipeline** preceded by a model selection phase where users choose the Chairman and expert model pool.
 
 ### Core Philosophy
 
@@ -30,7 +30,8 @@ graph TD
     FE -->|Stream Request| BE[Backend FastAPI]
     
     subgraph "Backend Orchestration (council.py)"
-        S0[Stage 0: Intent Analysis] --> B0[Stage 0.5: Brainstorm]
+        MS[Model Selection] --> S0[Stage 0: Intent Analysis]
+        S0 --> B0[Stage 0.5: Brainstorm]
         B0 --> S1[Stage 1: Expert Contributions]
         S1 --> V1[Stage 2.5: Verification]
         V1 --> P1[Stage 2.75: Synthesis Planning]
@@ -39,11 +40,13 @@ graph TD
     end
     
     subgraph "LLM Providers (OpenRouter)"
-        M1[Google Gemini 2.0]
-        M2[Minimax]
-        M3[DeepSeek v3]
-        M4[Qwen 2.5/3]
-        M5[Z-AI GLM]
+        M1[Minimax]
+        M2[DeepSeek]
+        M3[Qwen 2.5/3]
+        M4[Z-AI GLM]
+        M5[Kimi]
+        M6[GPT-5.2]
+        M7[Gemini 3 Flash Preview]
     end
     
     BE <-->|API Calls| M1 & M2 & M3 & M4 & M5
@@ -53,9 +56,15 @@ graph TD
 
 ---
 
-## 3. The 7-Stage Pipeline (Details)
+## 3. The Pipeline (Details)
 
 All orchestration logic resides in `backend/council.py`.
+
+### 0. Model Selection (UI + API)
+
+- **Input**: User-selected chairman model + expert model pool
+- **Rules**: At least 6 expert models must be selected
+- **Output**: Model selection metadata stored with the message
 
 ### 1. Intent Analysis (`stage0_analyze_intent`)
 
@@ -65,21 +74,21 @@ All orchestration logic resides in `backend/council.py`.
 
 ### 2. Expert Brainstorm (`stage_brainstorm_experts`)
 
-- **Process**: All 6 configured models generate expert suggestions in parallel.
-- **Synthesis**: Chairman model synthesizes the best 6 experts from these suggestions.
-- **Output**: List of 6 experts with specific Roles, Tasks (50+ words), and Measurable Objectives.
+- **Process**: All selected expert models generate expert suggestions in parallel.
+- **Synthesis**: Chairman model synthesizes the final expert team.
+- **Output**: List of experts with specific Roles, Tasks (50+ words), and Measurable Objectives.
 
 ### 3. Sequential Contributions (`stage1_sequential_contributions`)
 
-- **Process**: Experts 1-6 run sequentially.
+- **Process**: Experts run sequentially based on the selected pool.
 - **Context**: Each expert sees the query, intent, and *all prior contributions*.
 - **Quality Control**: Prompts mandate finding inaccuracies/assumptions in previous work before adding new value.
-- **Model Rotation**: Models are rotated round-robin from `COUNCIL_MODELS`.
+- **Model Rotation**: Models are rotated round-robin from the selected expert pool.
 
 ### 4. Verification (`stage_verification`)
 
-- **Process**: Meticulous fact-checker reviews critical claims in contributions.
-- **Output**: Verified/Debunked status for key points.
+- **Process**: Meticulous fact-checker + reasoning auditor reviews critical claims and logic across contributions.
+- **Output**: Factual corrections plus reasoning issues (gaps, inconsistencies, logical flaws, assumptions).
 
 ### 5. Synthesis Planning (`stage_synthesis_planning`)
 
@@ -103,9 +112,9 @@ All orchestration logic resides in `backend/council.py`.
 
 Configuration is centralized in `backend/config.py`.
 
-### Models (`COUNCIL_MODELS`)
+### Models (`COUNCIL_MODELS` and `AVAILABLE_MODELS`)
 
-The pool of models used for expert roles. Currently configured with 6 distinct high-IQ models:
+The pool of models used for expert roles. Currently configured with 8 models:
 
 1. `minimax/minimax-m2.1`
 2. `deepseek/deepseek-v3.2`
@@ -113,6 +122,8 @@ The pool of models used for expert roles. Currently configured with 6 distinct h
 4. `z-ai/glm-4.7`
 5. `moonshotai/kimi-k2-0905`
 6. `qwen/qwen3-235b-a22b-2507`
+7. `openai/gpt-5.2`
+8. `google/gemini-3-flash-preview`
 
 ### Chairman (`CHAIRMAN_MODEL`)
 
@@ -122,7 +133,8 @@ The model responsible for synthesis tasks (Planning, Team Selection, Final Outpu
 
 ### Experts
 
-- **Count**: `NUM_EXPERTS = 6` (in `backend/council.py`)
+- **Count**: Dynamic based on selected expert models
+- **Minimum**: `MIN_EXPERT_MODELS = 6` (in `backend/config.py`)
 
 ---
 
@@ -141,7 +153,8 @@ Council/
 │   │   ├── App.jsx             # Main state machine, handling SSE events
 │   │   ├── components/
 │   │   │   ├── ChatInterface.jsx   # Main view, renders stages
-│   │   │   ├── ContributionsStage.jsx # Visualization of Experts 1-6
+│   │   │   ├── ModelSelector.jsx   # Pre-stage model selection UI
+│   │   │   ├── ContributionsStage.jsx # Visualization of Experts 1-N
 │   │   │   ├── Stage0.jsx          # Intent & Team display
 │   │   │   └── Stage3.jsx          # Final Artifact display
 │   │   └── api.js              # Fetch wrappers
