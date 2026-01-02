@@ -63,6 +63,17 @@
     color: var(--color-text-main);
 }
 
+.expert-model-badge {
+    font-size: 0.7rem;
+    background: var(--color-surface-highlight);
+    padding: 2px 8px;
+    border-radius: 4px;
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+    font-family: var(--font-mono);
+    opacity: 0.8;
+}
+
 .expert-mandate {
     padding: 16px 24px;
     background: #FDFDFD;

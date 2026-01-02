@@ -235,19 +235,34 @@ Create the optimal expert team now:"""
     try:
         import json
         import re
+        # Find the first { and the last } to extract JSON block
         json_match = re.search(r'\{.*\}', content, re.DOTALL)
         if json_match:
-            data = json.loads(json_match.group())
+            try:
+                data = json.loads(json_match.group())
+            except json.JSONDecodeError:
+                # Try to fix common JSON issues like trailing commas
+                cleaned_json = re.sub(r',\s*\}', '}', json_match.group())
+                cleaned_json = re.sub(r',\s*\]', ']', cleaned_json)
+                data = json.loads(cleaned_json)
+            
             experts = data.get("experts", [])
             rationale = data.get("team_rationale", "")
             
             normalized = []
             for i, e in enumerate(experts[:NUM_EXPERTS]):
+                # Be flexible with key names
+                role = e.get("role") or e.get("name") or e.get("title") or f"Expert {i+1}"
+                task = e.get("task") or e.get("description") or e.get("details") or "Contribute expertise"
                 objectives = e.get("objectives", [])
-                objectives_str = " | ".join(objectives) if objectives else "Add value"
+                if isinstance(objectives, str):
+                    objectives_str = objectives
+                else:
+                    objectives_str = " | ".join(objectives) if objectives else "Add value"
+                
                 normalized.append({
-                    "name": e.get("role", f"Expert {i+1}"),
-                    "description": e.get("task", "Contribute expertise"),
+                    "name": role,
+                    "description": task,
                     "objectives": objectives_str,
                     "order": e.get("order", i + 1)
                 })
@@ -261,7 +276,7 @@ Create the optimal expert team now:"""
             
             return brainstorm_display, normalized
     except Exception as e:
-        print(f"Error parsing brainstorm synthesis: {e}")
+        print(f"Error parsing brainstorm synthesis: {e}. Raw content: {content[:200]}...")
     
     return brainstorm_display, default_experts
 
@@ -421,8 +436,8 @@ async def stage_verification(
     # 1. Generate Search Queries
     query_gen_prompt = f"""<task>
 You are a Fact-Check Strategist dedicated to eliminating hallucinations. 
-Review the expert contributions and identify high-risk data points (pricing, dates, technical specs, percentages).
-Generate EXACTLY 5 targeted web search queries. Add terms like "official", "statistics", "report", or "documentation" where appropriate to ensure high-quality results.
+Review the expert contributions and flag specific data points that are prone to hallucination (e.g., pricing, release dates, version numbers, technical specs).
+Generate EXACTLY 3 targeted web search queries to rigorously verify these high-risk claims.
 </task>
 
 <user_query>{user_query}</user_query>
@@ -434,7 +449,7 @@ Generate EXACTLY 5 targeted web search queries. Add terms like "official", "stat
 
 <output_format>
 Return ONLY a JSON array of strings:
-["query 1", "query 2", "query 3", "query 4", "query 5"]
+["query 1", "query 2", "query 3"]
 </output_format>"""
 
     search_queries = []
@@ -462,7 +477,7 @@ Return ONLY a JSON array of strings:
                     for q in queries:
                         try:
                             # Fetch results (blocking IO)
-                            r = list(ddgs.text(q, max_results=5)) # INCREASED to 5
+                            r = list(ddgs.text(q, max_results=3)) # Increased to 3
                             if r:
                                 formatted_hits = []
                                 for hit in r:
@@ -477,7 +492,7 @@ Return ONLY a JSON array of strings:
                 return results
 
             # Run in thread pool to avoid blocking async loop
-            results = await asyncio.to_thread(_run_search, search_queries[:5])
+            results = await asyncio.to_thread(_run_search, search_queries[:3])
             
             if results:
                 search_evidence = "\n\n".join(results)
@@ -494,17 +509,17 @@ Return ONLY a JSON array of strings:
 </search_evidence>
 
 <instructions>
-Use the Search Evidence to RIGOROUSLY VERIFY the claims.
-- **Strict Quality Filter**: ONLY rely on highest-quality resources (Official docs, .edu, .gov, major news institutions). Ignore low-quality blogs or forums.
-- **Multi-Source Support**: For every correction, cite at least 2 distinct high-quality sources if available.
-- **Quantifiable Data**: Provide exact numbers, percentages, and dates from the search results to replace any vague or incorrect expert claims.
-- **Logic critique**: Explain if the expert's reasoning is flawed based on the new data.
-- **Strict Citation**: Citations MUST use the format: `[Source Name](URL)`.
+Use the Search Evidence to VALIDATE or DEBUNK the claims.
+- **Prioritize Reputable Sources**: Rely on official documentation, major news outlets, and academic sources.
+- **Corrective Action**: If a claim is wrong, provide the CORRECT information with citations.
+- **Reasoning**: Explain why the expert's claim might be inaccurate.
+- **CITATION FORMAT**: You MUST cite sources as markdown links: [Source Name](URL). Example: "According to [OpenAI Pricing](https://openai.com/pricing), the cost is..."
 </instructions>
 """
 
     verification_prompt = f"""<task>
-You are a Meticulous Fact-Checker. Your goal is to ground the expert contributions in REAL-WORLD DATA and provide actionable corrections for the Chairman.
+You are a Meticulous Fact-Checker. Verify the expert contributions against the provided Search Evidence (if available) and your own knowledge.
+Focus on accurate numbers, dates, pricing, and technical facts.
 </task>
 
 <user_query>{user_query}</user_query>
@@ -519,24 +534,29 @@ You are a Meticulous Fact-Checker. Your goal is to ground the expert contributio
 <output_format>
 ## Factual Verification Report
 
-### Claim 1: [Statement being verified]
-- **Sources**: [Source A](URL), [Source B](URL)
+### Claim 1: [Statement]
 - **Verdict**: Verified / Partially Accurate / Incorrect
-- **Fact check & Correction**: [Detailed correction with quantifiable data from search. Cite sources in-line: [Name](URL)]
-- **Critiques**:
-  - **Accuracy**: [Assess factual correctness]
-  - **Logic**: [Assess reasoning validity]
-  - **Consistency**: [Assess alignment with consensus]
-  - **Gaps**: [Highlight missing info or unsubstantiated parts]
+- **Corrective Information**: [Accurate facts from search. CITE SOURCE: [Name](URL)]
+- **Reasoning**: [Explain conflict or gap]
+- **Source Reliability**: [High/Medium/Low]
 
-(Repeat for 3-5 critical claims)
+### Claim 2: [Statement]
+- **Verdict**: ...
+- **Corrective Information**: ...
+- **Reasoning**: ...
+- **Source Reliability**: ...
+
+### Claim 3: [Statement]
+- **Verdict**: ...
+- **Corrective Information**: ...
+- **Reasoning**: ...
+- **Source Reliability**: ...
 </output_format>
 
-Provide your comprehensive verification report now:"""
+Provide your verification report now:"""
 
     messages = [{"role": "user", "content": verification_prompt}]
-    # Low temperature for factual precision
-    response = await query_model("google/gemini-2.0-flash-001", messages, temperature=0.0)
+    response = await query_model("google/gemini-2.0-flash-001", messages)
     return response.get('content', 'Verification unavailable.') if response else "Verification unavailable."
 
 
@@ -560,7 +580,6 @@ async def stage_synthesis_planning(
     
     planning_prompt = f"""<task>
 You are the Synthesis Architect. Create a STRUCTURED PLAN for the Chairman's final synthesis.
-Your HIGHEST PRIORITY is to integrate the corrections from the <verification_report>.
 </task>
 
 <user_query>{user_query}</user_query>
@@ -578,23 +597,28 @@ Your HIGHEST PRIORITY is to integrate the corrections from the <verification_rep
 {verification_data}
 </verification_report>
 
-<constraints>
-1. **Truth Filtering**: If the verification report identifies an expert claim as "Incorrect" or "Partially Accurate", you MUST plan to exclude or correct that claim.
-2. **Data-Centric**: Use the quantifiable data (numbers, dates) from the verification report as the definitive source.
-</constraints>
-
 <output_format>
 ## Synthesis Plan for Chairman
 
-### Critical Corrections from Verification
-- [List specific facts from verification that MUST be included/corrected]
+### Critical Missing Elements
+- [What wasn't addressed]
 
-### Synthesis Strategy
-- [How to weave expert opinions while strictly adhering to verification data]
+### Reasoning Gaps to Address
+- [Logic needing deeper analysis]
+
+### Additional Expertise/Data Needed
+- [Missing facts or evidence]
+
+### Recommended Structure
+- [Outline for final artifact]
+
+### Quality Checklist
+- [ ] [Requirement 1]
+- [ ] [Requirement 2]
 
 ### Critical Actions for Chairman
-1. [Action 1: e.g., Replace Expert 2's pricing with $67B from verification]
-2. [Action 2: ...]
+1. [Must-do 1]
+2. [Must-do 2]
 </output_format>
 
 Provide the synthesis plan now:"""

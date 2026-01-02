@@ -8,8 +8,7 @@ from .config import OPENROUTER_API_KEY, OPENROUTER_API_URL
 async def query_model(
     model: str,
     messages: List[Dict[str, str]],
-    timeout: float = 120.0,
-    **kwargs
+    timeout: float = 120.0
 ) -> Optional[Dict[str, Any]]:
     """
     Query a single model via OpenRouter API.
@@ -18,7 +17,6 @@ async def query_model(
         model: OpenRouter model identifier (e.g., "openai/gpt-4o")
         messages: List of message dicts with 'role' and 'content'
         timeout: Request timeout in seconds
-        **kwargs: Additional parameters (e.g., temperature, max_tokens)
 
     Returns:
         Response dict with 'content' and optional 'reasoning_details', or None if failed
@@ -31,29 +29,52 @@ async def query_model(
     payload = {
         "model": model,
         "messages": messages,
-        **kwargs # Merge additional parameters
     }
 
-    try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(
-                OPENROUTER_API_URL,
-                headers=headers,
-                json=payload
-            )
-            response.raise_for_status()
+    import asyncio
+    max_retries = 3
+    base_delay = 2.0
 
-            data = response.json()
-            message = data['choices'][0]['message']
+    for attempt in range(max_retries):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(
+                    OPENROUTER_API_URL,
+                    headers=headers,
+                    json=payload
+                )
+                
+                if response.status_code == 429:
+                    # Rate limit - wait longer
+                    delay = base_delay * (2 ** attempt)
+                    print(f"Rate limited (429) for {model}. Retrying in {delay}s...")
+                    await asyncio.sleep(delay)
+                    continue
 
-            return {
-                'content': message.get('content'),
-                'reasoning_details': message.get('reasoning_details')
-            }
+                response.raise_for_status()
 
-    except Exception as e:
-        print(f"Error querying model {model}: {e}")
-        return None
+                data = response.json()
+                if not data.get('choices'):
+                    print(f"Invalid response from {model}: {data}")
+                    return None
+
+                message = data['choices'][0]['message']
+
+                return {
+                    'content': message.get('content'),
+                    'reasoning_details': message.get('reasoning_details')
+                }
+
+        except Exception as e:
+            delay = base_delay * (2 ** attempt)
+            if attempt < max_retries - 1:
+                print(f"Error querying model {model} (Attempt {attempt + 1}/{max_retries}): {e}. Retrying in {delay}s...")
+                await asyncio.sleep(delay)
+            else:
+                print(f"Final failure for model {model} after {max_retries} attempts: {e}")
+                return None
+    
+    return None
 
 
 

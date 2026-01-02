@@ -103,6 +103,18 @@
   background: linear-gradient(90deg, #A142F4, #D7AEFB);
 }
 
+.editorial-stage .markdown-content {
+  font-family: var(--font-base);
+  color: var(--color-text-sub);
+}
+
+.editorial-stage .markdown-content h2,
+.editorial-stage .markdown-content h3 {
+  color: var(--color-primary);
+  margin-top: 24px;
+  border-bottom: none;
+}
+
 .brainstorm-stage::before {
   content: '';
   position: absolute;
@@ -279,33 +291,35 @@
   to {
     transform: rotate(360deg);
   }
-}/* ... existing styles ... */
+}
+
+/* ... existing styles ... */
 
 .markdown-header-with-icon {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-family: var(--font-serif);
-    font-weight: 700;
-    color: var(--color-text-main);
-    margin-top: 1.5em;
-    margin-bottom: 0.75em;
-    font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-serif);
+  font-weight: 700;
+  color: var(--color-text-main);
+  margin-top: 1.5em;
+  margin-bottom: 0.75em;
+  font-size: 1.1rem;
 }
 
 .header-icon {
-    color: var(--color-primary);
-    flex-shrink: 0;
+  color: var(--color-primary);
+  flex-shrink: 0;
 }
 
 /* Ensure clean link styles */
 .styled-link {
-    color: var(--color-primary);
-    text-decoration: none;
-    border-bottom: 1px dashed var(--color-primary);
-    transition: opacity 0.2s;
+  color: var(--color-primary);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--color-primary);
+  transition: opacity 0.2s;
 }
 
 .styled-link:hover {
-    opacity: 0.8;
+  opacity: 0.8;
 }
