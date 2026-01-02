@@ -10,6 +10,7 @@
 - **Sequential Collaboration**: Experts build upon each other's work, providing deep, layered insights.
 - **Verification & Reasoning Audit**: A dedicated stage checks claims, logic, gaps, and inconsistencies.
 - **Editorial Synthesis**: A final "Chairman" synthesizes all contributions into a cohesive, style-calibrated response (Editorial/Council voice).
+- **Context-Aware Continuation**: Continue a thread using prior Chairman outputs as the baseline context, or start a fresh thread.
 - **Google-Quality UX**: A clean, elegant, and accessible interface featuring:
   - **Smart Iconography**: Dynamic detection of header context (Intent, Claim, Strategy) to display relevant Lucide icons.
   - **Typography**: Professional serif headers (`Merriweather`) paired with clean sans-serif body text.
@@ -21,10 +22,15 @@
 1. **🎯 Intent Analysis**: The "Master Intent Architect" decodes the explicit and implicit goals of the user.
 2. **🧠 Expert Brainstorm**: Multiple models propose the ideal team of experts.
 3. **👥 Sequential Contributions**: Selected experts (simulated by LLMs) contribute linearly, reviewing and building on prior work.
-4. **🔬 Factual Verification**: A "Meticulous Fact-Checker" validates key claims.
+4. **🔬 Verification & Reasoning Audit**: A "Meticulous Fact-Checker" validates claims and reasoning.
 5. **📋 Synthesis Planning**: A "Synthesis Architect" outlines the structure for the final answer.
 6. **✍️ Editorial Guidelines**: An "Editorial Director" defines the voice, tone, and formatting.
 7. **🏆 Final Synthesis**: The Chairman produces the final response, integrating all insights.
+
+## 🔁 Continuing a Thread
+
+- **Continue**: Add new instructions to evolve the latest Chairman output; the system treats the most recent Chairman response as the baseline context for the next cycle.
+- **Start New**: Begin a fresh thread to reset context and model selection.
 
 ## 🛠️ Tech Stack
 
