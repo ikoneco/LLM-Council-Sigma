@@ -1,94 +1,128 @@
-# LLM Council
+# 🧠 LLM Council
 
-![llmcouncil](header.jpg)
+**LLM Council** is a sophisticated multi-agent orchestration system that simulates a "council of experts" to solve complex user queries. Instead of a single zero-shot response, it employs a rigorous 7-stage pipeline where dynamic expert personas analyze, brainstorm, contribute, verify, and synthesize a high-quality final artifact.
 
-**LLM Council** is a next-generation AI orchestration platform that doesn't just answer questions—it assembles a bespoke team of AI experts to solve them.
+![LLM Council UI](./assets/ui_preview.webp)
 
-Instead of a single LLM responding to your prompt, LLM Council orchestrates a **7-Stage Sequential Collaboration** where multiple top-tier models (Gemini, Claude, GPT-4, etc.) brainstorm, research, verify, and synthesize a single, world-class artifact.
+## ✨ Key Features
 
-## 🚀 Key Features
+- **Multi-Stage Orchestration**: Moves beyond simple prompting to a state-managed workflow.
+- **Dynamic Expert Selection**: Automatically identifies the specialized roles needed (e.g., "Senior Product Strategist", "Security Architect") based on the query.
+- **Sequential Collaboration**: Experts build upon each other's work, providing deep, layered insights.
+- **Factual Verification**: A dedicated stage checks claims against logic and knowledge bases.
+- **Editorial Synthesis**: A final "Chairman" synthesizes all contributions into a cohesive, style-calibrated response (Editorial/Council voice).
+- **Google-Quality UX**: A clean, elegant, and accessible interface featuring:
+  - **Smart Iconography**: Dynamic detection of header context (Intent, Claim, Strategy) to display relevant Lucide icons.
+  - **Typography**: Professional serif headers (`Merriweather`) paired with clean sans-serif body text.
+  - **Modern Design**: Glassmorphism, subtle shadows, and a refined color palette.
 
-- **7-Stage Cognitive Pipeline**:
-    1. **Intent Analysis**: Deeply understands what you *really* want.
-    2. **Global Brainstorming**: All models propose expert roles tailored to your query.
-    3. **Team Assembly**: A Chairman model selects the perfect 6-person expert team.
-    4. **Sequential Collaboration**: Experts build on each other's work (not just debate).
-    5. **Real-time Verification**: Claims are fact-checked mid-stream.
-    6. **Strategic Planning**: A "Synthesis Architect" & "Editorial Director" plan the final output.
-    7. **Final Synthesis**: A unified, high-quality response (no chat threads to read).
-- **Multi-Model Intelligence**: Leverages the best models via OpenRouter (Gemini 2.0, DeepSeek v3, Qwen 2.5, Minimax, etc.).
-- **Transparent Process**: Watch the "mind" of the council work in real-time on the frontend.
+## 🔄 The Council Workflow
 
-## 📚 Documentation
+1. **🎯 Intent Analysis**: The "Master Intent Architect" decodes the explicit and implicit goals of the user.
+2. **🧠 Expert Brainstorm**: Multiple models propose the ideal team of experts.
+3. **👥 Sequential Contributions**: Selected experts (simulated by LLMs) contribute linearly, reviewing and building on prior work.
+4. **🔬 Factual Verification**: A "Meticulous Fact-Checker" validates key claims.
+5. **📋 Synthesis Planning**: A "Synthesis Architect" outlines the structure for the final answer.
+6. **✍️ Editorial Guidelines**: An "Editorial Director" defines the voice, tone, and formatting.
+7. **🏆 Final Synthesis**: The Chairman produces the final response, integrating all insights.
 
-- [Architecture Overview](docs/ARCHITECTURE.md) - Deep dive into the 7-stage pipeline.
-- [API Reference](docs/API.md) - Backend API endpoints.
-- [Contributing Guide](CONTRIBUTING.md) - How to help us improve.
+## 🛠️ Tech Stack
 
-## 🛠️ Setup
+### Frontend
 
-### 1. Prerequisites
+- **Framework**: React 19 + Vite
+- **Styling**: Vanilla CSS (Variables-based design system)
+- **Icons**: Lucide React (Smart context-aware rendering)
+- **Rendering**: React Markdown + Remark GFM
 
-- [uv](https://docs.astral.sh/uv/) (for Python)
-- Node.js & npm (for Frontend)
-- [OpenRouter](https://openrouter.ai/) API Key
+### Backend
 
-### 2. Installation
+- **Runtime**: Python 3.10+
+- **Framework**: FastAPI + Uvicorn
+- **Orchestration**: Custom async pipeline handling SSE (Server-Sent Events)
+- **AI Provider**: OpenRouter (Gemini 2.0 Flash, etc.)
+- **Package Manager**: `uv`
 
-**Backend:**
+## � Getting Started
 
-```bash
-uv sync
+### Prerequisites
+
+- Node.js (v18+)
+- Python (v3.10+)
+- `uv` (Python package manager)
+- An OpenRouter API Key
+
+### Backend Setup
+
+1. Navigate to the project root:
+
+    ```bash
+    cd Council
+    ```
+
+2. Create a `.env` file with your API key:
+
+    ```env
+    OPENROUTER_API_KEY=sk-or-your-key-here
+    ```
+
+3. Run the backend (dependencies are handled by `uv`):
+
+    ```bash
+    lsof -ti:8001 | xargs kill -9  # Optional: clear port
+    uv run python -m backend.main
+    ```
+
+    The server will start at `http://localhost:8001`.
+
+### Frontend Setup
+
+1. Navigate to the frontend directory:
+
+    ```bash
+    cd frontend
+    ```
+
+2. Install dependencies:
+
+    ```bash
+    npm install
+    ```
+
+3. Start the development server:
+
+    ```bash
+    npm run dev
+    ```
+
+    The app will open at `http://localhost:5173`.
+
+## 📂 Project Structure
+
+```
+Council/
+├── backend/
+│   ├── main.py          # FastAPI entry point
+│   ├── council.py       # Core orchestration logic & prompts
+│   ├── config.py        # Model configurations
+│   └── openrouter.py    # API client
+├── frontend/
+│   ├── src/
+│   │   ├── components/  # Stage components (Stage0, Stage3, ChatInterface)
+│   │   ├── App.jsx      # Main state & SSE handling
+│   │   └── index.css    # Global design system
+│   └── package.json
+└── README.md
 ```
 
-**Frontend:**
+## 🎨 Design Philosophy
 
-```bash
-cd frontend
-npm install
-cd ..
-```
+The UI follows a rigid "Quality Bar" focused on:
 
-### 3. Configuration
+- **Clarity**: High contrast, readable measures, and ample whitespace.
+- **Elegance**: Purposeful use of serif fonts for headings to convey authority.
+- **Feedback**: Clear loading states and progression indicators for the complex backend process.
+- **Consistency**: Unified design language for all stages and artifacts.
 
-Create a `.env` file in the root:
-
-```bash
-OPENROUTER_API_KEY=sk-or-v1-your-key-here
-```
-
-(Optional) Customize models in `backend/config.py`.
-
-## 🏃‍♂️ Running the Application
-
-**Option 1: Quick Start**
-
-```bash
-./start.sh
-```
-
-**Option 2: Manual Start**
-Terminal 1 (Backend):
-
-```bash
-uv run python -m backend.main
-```
-
-Terminal 2 (Frontend):
-
-```bash
-cd frontend
-npm run dev
-```
-
-Open [http://localhost:5173](http://localhost:5173) to consult the council.
-
-## 🏗️ Architecture
-
-The system uses a **FastAPI** backend to orchestrate the cognitive workflow and a **React** frontend to visualize the streaming process via Server-Sent Events (SSE).
-
-State is managed via `council.py` (logic) and `storage.py` (JSON persistence).
-
-## License
-
-MIT License. Vibe coded with love.
+---
+*Built by the Google Deepmind Advanced Agentic Coding Team.*
