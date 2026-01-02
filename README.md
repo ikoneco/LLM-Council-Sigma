@@ -7,7 +7,7 @@
 - **Multi-Stage Orchestration**: Moves beyond simple prompting to a state-managed workflow.
 - **Dynamic Expert Selection**: Automatically identifies the specialized roles needed (e.g., "Senior Product Strategist", "Security Architect") based on the query.
 - **Sequential Collaboration**: Experts build upon each other's work, providing deep, layered insights.
-- **Factual Verification**: A dedicated stage checks claims against logic and knowledge bases.
+- **Factual Verification**: A dedicated stage uses real-time web search (DuckDuckGo) to validate claims against reputable sources and quantifiable data.
 - **Editorial Synthesis**: A final "Chairman" synthesizes all contributions into a cohesive, style-calibrated response (Editorial/Council voice).
 - **Google-Quality UX**: A clean, elegant, and accessible interface featuring:
   - **Smart Iconography**: Dynamic detection of header context (Intent, Claim, Strategy) to display relevant Lucide icons.
@@ -19,7 +19,7 @@
 1. **🎯 Intent Analysis**: The "Master Intent Architect" decodes the explicit and implicit goals of the user.
 2. **🧠 Expert Brainstorm**: Multiple models propose the ideal team of experts.
 3. **👥 Sequential Contributions**: Selected experts (simulated by LLMs) contribute linearly, reviewing and building on prior work.
-4. **🔬 Factual Verification**: A "Meticulous Fact-Checker" validates key claims.
+4. **🔬 Factual Verification**: A "Meticulous Fact-Checker" uses real-time search to validate claims with clickable source citations.
 5. **📋 Synthesis Planning**: A "Synthesis Architect" outlines the structure for the final answer.
 6. **✍️ Editorial Guidelines**: An "Editorial Director" defines the voice, tone, and formatting.
 7. **🏆 Final Synthesis**: The Chairman produces the final response, integrating all insights.

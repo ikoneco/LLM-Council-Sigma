@@ -34,6 +34,19 @@ export default function ContributionsStage({ contributions, loading, currentOrde
                             <div className="entry-header">
                                 <Bot size={20} className="mr-2 text-primary" color="var(--color-primary)" style={{ marginRight: '8px' }} />
                                 <span className="expert-name">{entry.expert?.name || 'Expert'}</span>
+                                {entry.model && (
+                                    <span className="expert-model-badge" style={{
+                                        fontSize: '0.7rem',
+                                        background: 'rgba(0,0,0,0.05)',
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        marginLeft: '8px',
+                                        color: 'var(--color-text-muted)',
+                                        border: '1px solid rgba(0,0,0,0.1)'
+                                    }}>
+                                        {entry.model}
+                                    </span>
+                                )}
                             </div>
 
                             {entry.expert?.description && (

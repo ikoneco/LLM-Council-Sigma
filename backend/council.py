@@ -1,6 +1,7 @@
 """LLM Council orchestration with sequential expert collaboration."""
 
 from typing import List, Dict, Any, Tuple, Optional
+import asyncio
 from .openrouter import query_model
 from .config import COUNCIL_MODELS, CHAIRMAN_MODEL
 
@@ -408,17 +409,20 @@ async def stage_verification(
         contributions: List[Dict[str, Any]],
         history: List[Dict[str, Any]] = None
 ) -> str:
-    """Stage 2.5: Verify key claims from the contributions."""
+    """Stage 2.5: Verify key claims using simple web search context."""
     context_str = format_conversation_history(history or [])
     context_section = f"\n<conversation_context>\n{context_str}\n</conversation_context>" if context_str else ""
     
     summary = "\n".join([
-        f"- Expert {entry['order']} ({entry['expert']['name']}): \"{entry['contribution'][:200]}...\""
+        f"- Expert {entry['order']} ({entry['expert']['name']}): \"{entry['contribution']}...\""
         for entry in contributions
     ])
     
-    verification_prompt = f"""<task>
-You are a meticulous fact-checker. Review the expert contributions and verify the 2-3 most critical factual claims.
+    # 1. Generate Search Queries
+    query_gen_prompt = f"""<task>
+You are a Fact-Check Strategist dedicated to eliminating hallucinations. 
+Review the expert contributions and identify high-risk data points (pricing, dates, technical specs, percentages).
+Generate EXACTLY 5 targeted web search queries. Add terms like "official", "statistics", "report", or "documentation" where appropriate to ensure high-quality results.
 </task>
 
 <user_query>{user_query}</user_query>
@@ -429,21 +433,110 @@ You are a meticulous fact-checker. Review the expert contributions and verify th
 </expert_contributions>
 
 <output_format>
+Return ONLY a JSON array of strings:
+["query 1", "query 2", "query 3", "query 4", "query 5"]
+</output_format>"""
+
+    search_queries = []
+    try:
+        messages = [{"role": "user", "content": query_gen_prompt}]
+        response = await query_model("google/gemini-2.0-flash-001", messages)
+        content = response.get('content', '[]')
+        import json
+        import re
+        json_match = re.search(r'\[.*\]', content, re.DOTALL)
+        if json_match:
+            search_queries = json.loads(json_match.group())
+    except Exception as e:
+        print(f"Error generating search queries: {e}")
+
+    # 2. Execute Search (Non-blocking)
+    search_evidence = ""
+    if search_queries:
+        try:
+            def _run_search(queries):
+                from duckduckgo_search import DDGS
+                results = []
+                # Use DDGS context manager
+                with DDGS() as ddgs:
+                    for q in queries:
+                        try:
+                            # Fetch results (blocking IO)
+                            r = list(ddgs.text(q, max_results=5)) # INCREASED to 5
+                            if r:
+                                formatted_hits = []
+                                for hit in r:
+                                    title = hit.get('title', 'Unknown Source')
+                                    href = hit.get('href', '#')
+                                    body = hit.get('body', '')
+                                    formatted_hits.append(f"Source: {title}\nURL: {href}\nSnippet: {body}")
+                                
+                                results.append(f"Query: {q}\n" + "\n---\n".join(formatted_hits))
+                        except Exception:
+                            continue
+                return results
+
+            # Run in thread pool to avoid blocking async loop
+            results = await asyncio.to_thread(_run_search, search_queries[:5])
+            
+            if results:
+                search_evidence = "\n\n".join(results)
+        except Exception as e:
+            print(f"Search execution failed: {e}")
+            search_evidence = "Search unavailable."
+
+    # 3. Final Verification with Evidence
+    evidence_section = ""
+    if search_evidence:
+        evidence_section = f"""
+<search_evidence>
+{search_evidence}
+</search_evidence>
+
+<instructions>
+Use the Search Evidence to RIGOROUSLY VERIFY the claims.
+- **Strict Quality Filter**: ONLY rely on highest-quality resources (Official docs, .edu, .gov, major news institutions). Ignore low-quality blogs or forums.
+- **Multi-Source Support**: For every correction, cite at least 2 distinct high-quality sources if available.
+- **Quantifiable Data**: Provide exact numbers, percentages, and dates from the search results to replace any vague or incorrect expert claims.
+- **Logic critique**: Explain if the expert's reasoning is flawed based on the new data.
+- **Strict Citation**: Citations MUST use the format: `[Source Name](URL)`.
+</instructions>
+"""
+
+    verification_prompt = f"""<task>
+You are a Meticulous Fact-Checker. Your goal is to ground the expert contributions in REAL-WORLD DATA and provide actionable corrections for the Chairman.
+</task>
+
+<user_query>{user_query}</user_query>
+{context_section}
+
+<expert_contributions>
+{summary}
+</expert_contributions>
+
+{evidence_section}
+
+<output_format>
 ## Factual Verification Report
 
-### Claim 1: [Statement]
+### Claim 1: [Statement being verified]
+- **Sources**: [Source A](URL), [Source B](URL)
 - **Verdict**: Verified / Partially Accurate / Incorrect
-- **Evidence**: [Justification]
+- **Fact check & Correction**: [Detailed correction with quantifiable data from search. Cite sources in-line: [Name](URL)]
+- **Critiques**:
+  - **Accuracy**: [Assess factual correctness]
+  - **Logic**: [Assess reasoning validity]
+  - **Consistency**: [Assess alignment with consensus]
+  - **Gaps**: [Highlight missing info or unsubstantiated parts]
 
-### Claim 2: [Statement]
-- **Verdict**: Verified / Partially Accurate / Incorrect
-- **Evidence**: [Justification]
+(Repeat for 3-5 critical claims)
 </output_format>
 
-Provide your verification report now:"""
+Provide your comprehensive verification report now:"""
 
     messages = [{"role": "user", "content": verification_prompt}]
-    response = await query_model("google/gemini-2.0-flash-001", messages)
+    # Low temperature for factual precision
+    response = await query_model("google/gemini-2.0-flash-001", messages, temperature=0.0)
     return response.get('content', 'Verification unavailable.') if response else "Verification unavailable."
 
 
@@ -467,6 +560,7 @@ async def stage_synthesis_planning(
     
     planning_prompt = f"""<task>
 You are the Synthesis Architect. Create a STRUCTURED PLAN for the Chairman's final synthesis.
+Your HIGHEST PRIORITY is to integrate the corrections from the <verification_report>.
 </task>
 
 <user_query>{user_query}</user_query>
@@ -484,28 +578,23 @@ You are the Synthesis Architect. Create a STRUCTURED PLAN for the Chairman's fin
 {verification_data}
 </verification_report>
 
+<constraints>
+1. **Truth Filtering**: If the verification report identifies an expert claim as "Incorrect" or "Partially Accurate", you MUST plan to exclude or correct that claim.
+2. **Data-Centric**: Use the quantifiable data (numbers, dates) from the verification report as the definitive source.
+</constraints>
+
 <output_format>
 ## Synthesis Plan for Chairman
 
-### Critical Missing Elements
-- [What wasn't addressed]
+### Critical Corrections from Verification
+- [List specific facts from verification that MUST be included/corrected]
 
-### Reasoning Gaps to Address
-- [Logic needing deeper analysis]
-
-### Additional Expertise/Data Needed
-- [Missing facts or evidence]
-
-### Recommended Structure
-- [Outline for final artifact]
-
-### Quality Checklist
-- [ ] [Requirement 1]
-- [ ] [Requirement 2]
+### Synthesis Strategy
+- [How to weave expert opinions while strictly adhering to verification data]
 
 ### Critical Actions for Chairman
-1. [Must-do 1]
-2. [Must-do 2]
+1. [Action 1: e.g., Replace Expert 2's pricing with $67B from verification]
+2. [Action 2: ...]
 </output_format>
 
 Provide the synthesis plan now:"""
@@ -585,11 +674,12 @@ Consider:
 - [What makes this response "excellent" vs. "adequate"]
 </output_format>
 
+Do NOT wrap the output in markdown code blocks (```). Provide raw markdown only.
 Provide the editorial guidelines now:"""
 
     messages = [{"role": "user", "content": editorial_prompt}]
     response = await query_model("google/gemini-2.0-flash-001", messages)
-    return response.get('content', 'Editorial guidelines unavailable.') if response else "Editorial guidelines unavailable."
+    return response.get('content', 'Editorial guidelines unavailable.').replace("```markdown", "").replace("```", "") if response else "Editorial guidelines unavailable."
 
 
 async def stage3_synthesize_final(
@@ -649,6 +739,7 @@ You MUST:
 4. **Match the recommended structure** from the plan
 5. **Satisfy ALL Quality Checkpoints**
 6. **Meet the Quality Bar** defined in editorial guidelines
+7. **STRICTLY ADHERE TO VERIFICATION**: Use the <verification_report> to filter untrue claims. If a claim is marked 'Incorrect', exclude it. If 'Partially Accurate', provide nuance. Do not hallucinate data.
 </chairman_mandate>
 
 <synthesis_protocol>

@@ -8,7 +8,8 @@ from .config import OPENROUTER_API_KEY, OPENROUTER_API_URL
 async def query_model(
     model: str,
     messages: List[Dict[str, str]],
-    timeout: float = 120.0
+    timeout: float = 120.0,
+    **kwargs
 ) -> Optional[Dict[str, Any]]:
     """
     Query a single model via OpenRouter API.
@@ -17,6 +18,7 @@ async def query_model(
         model: OpenRouter model identifier (e.g., "openai/gpt-4o")
         messages: List of message dicts with 'role' and 'content'
         timeout: Request timeout in seconds
+        **kwargs: Additional parameters (e.g., temperature, max_tokens)
 
     Returns:
         Response dict with 'content' and optional 'reasoning_details', or None if failed
@@ -29,6 +31,7 @@ async def query_model(
     payload = {
         "model": model,
         "messages": messages,
+        **kwargs # Merge additional parameters
     }
 
     try:
