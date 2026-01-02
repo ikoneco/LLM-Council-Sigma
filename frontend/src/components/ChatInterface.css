@@ -374,3 +374,30 @@
   flex: 1;
   min-width: 0;
 }
+
+.new-topic-button {
+  padding: 14px 20px;
+  background: transparent;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  color: #64748b;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  align-self: flex-end;
+}
+
+.new-topic-button:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #334155;
+  transform: translateY(-1px);
+}
+
+.new-topic-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-color: #e2e8f0;
+}

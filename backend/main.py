@@ -107,14 +107,17 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
             if is_first_message:
                 title_task = asyncio.create_task(generate_conversation_title(request.content))
 
+            # Define history for context-aware functions (excludes current message which is added in storage but not in 'conversation' variable yet)
+            history = conversation.get("messages", [])
+
             # Stage 0: Analyze intent
             yield f"data: {json.dumps({'type': 'stage0_start'})}\n\n"
-            intent_analysis = await stage0_analyze_intent(request.content)
+            intent_analysis = await stage0_analyze_intent(request.content, history)
             yield f"data: {json.dumps({'type': 'stage0_complete', 'data': {'analysis': intent_analysis}})}\n\n"
 
             # Stage 0.5: Brainstorm experts
             yield f"data: {json.dumps({'type': 'brainstorm_start'})}\n\n"
-            brainstorm_content, experts = await stage_brainstorm_experts(request.content, intent_analysis)
+            brainstorm_content, experts = await stage_brainstorm_experts(request.content, intent_analysis, history)
             yield f"data: {json.dumps({'type': 'brainstorm_complete', 'data': {'brainstorm_content': brainstorm_content, 'experts': experts}})}\n\n"
 
             # Stage 1: Sequential Expert Contributions
@@ -131,7 +134,8 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
                     expert, 
                     contributions, 
                     order,
-                    intent_analysis
+                    intent_analysis,
+                    history
                 )
                 
                 entry = {
@@ -148,7 +152,7 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
 
             # Stage 2.5: Verification
             yield f"data: {json.dumps({'type': 'verification_start'})}\n\n"
-            verification_data = await stage_verification(request.content, contributions)
+            verification_data = await stage_verification(request.content, contributions, history)
             yield f"data: {json.dumps({'type': 'verification_complete', 'data': verification_data})}\n\n"
 
             # Stage 2.75: Synthesis Planning
@@ -157,7 +161,8 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
                 request.content,
                 contributions,
                 intent_analysis,
-                verification_data
+                verification_data,
+                history
             )
             yield f"data: {json.dumps({'type': 'planning_complete', 'data': synthesis_plan})}\n\n"
 
@@ -167,7 +172,8 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
                 request.content,
                 intent_analysis,
                 contributions,
-                synthesis_plan
+                synthesis_plan,
+                history
             )
             yield f"data: {json.dumps({'type': 'editorial_complete', 'data': editorial_guidelines})}\n\n"
 
@@ -179,7 +185,8 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
                 intent_analysis=intent_analysis,
                 verification_data=verification_data,
                 synthesis_plan=synthesis_plan,
-                editorial_guidelines=editorial_guidelines
+                editorial_guidelines=editorial_guidelines,
+                history=history
             )
             yield f"data: {json.dumps({'type': 'stage3_complete', 'data': stage3_result})}\n\n"
 

@@ -9,6 +9,7 @@ import './ChatInterface.css';
 export default function ChatInterface({
   conversation,
   onSendMessage,
+  onNewConversation,
   isLoading,
 }) {
   const [input, setInput] = useState('');
@@ -227,6 +228,15 @@ export default function ChatInterface({
 
       <div className="input-area">
         <form className="input-form" onSubmit={handleSubmit}>
+          <button
+            type="button"
+            className="new-topic-button"
+            onClick={onNewConversation}
+            disabled={isLoading}
+            title="Start a new thread"
+          >
+            + New
+          </button>
           <textarea
             className="message-input"
             placeholder="Ask your question..."

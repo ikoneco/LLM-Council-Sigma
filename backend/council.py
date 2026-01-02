@@ -1,25 +1,54 @@
 """LLM Council orchestration with sequential expert collaboration."""
 
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from .openrouter import query_model
 from .config import COUNCIL_MODELS, CHAIRMAN_MODEL
 
 NUM_EXPERTS = 6
 
 
-async def stage0_analyze_intent(user_query: str) -> str:
+def format_conversation_history(history: List[Dict[str, Any]]) -> str:
+    """Format previous conversation history for context handling."""
+    if not history:
+        return ""
+    
+    formatted = []
+    for msg in history:
+        role = msg.get("role")
+        if role == "user":
+            formatted.append(f"### 👤 User:\n{msg.get('content', '')}")
+        elif role == "assistant":
+            # Extract stage3 response if available, otherwise generic content
+            response = ""
+            if "stage3" in msg and msg["stage3"]:
+                response = msg["stage3"].get("response", "")
+            elif "content" in msg:
+                response = msg["content"]
+            
+            if response:
+                formatted.append(f"### 🤖 Chairman (Previous Output):\n{response}")
+                
+    return "\n".join(formatted)
+
+
+async def stage0_analyze_intent(user_query: str, history: List[Dict[str, Any]] = None) -> str:
     """
     Stage 0: Master Intent Architect.
     Analyze the user's intent deeply - expert selection happens in brainstorm stage.
     """
+    context_str = format_conversation_history(history or [])
+    context_section = f"\n<conversation_context>\n{context_str}\n</conversation_context>" if context_str else ""
+
     intent_prompt = f"""<system>You are the Master Intent Architect, an elite cognitive strategist.</system>
 
 <task>
 Deeply analyze the user query to understand their EXPLICIT and IMPLICIT intent.
 Do NOT select experts yet - that happens in a later brainstorm stage.
+If there is conversation context, analyze how this new query evolves the previous discussion.
 </task>
 
 <query>{user_query}</query>
+{context_section}
 
 <analysis_framework>
 1. **Surface Intent**: What is the user literally asking?
@@ -61,18 +90,22 @@ Provide your deep intent analysis now:"""
     return response.get('content', 'Analyzing query requirements...')
 
 
-async def stage_brainstorm_experts(user_query: str, intent_analysis: str) -> Tuple[str, List[Dict[str, str]]]:
+async def stage_brainstorm_experts(user_query: str, intent_analysis: str, history: List[Dict[str, Any]] = None) -> Tuple[str, List[Dict[str, str]]]:
     """
     Stage 0.5: All models brainstorm to define experts.
     Each model suggests experts, then chairman synthesizes final team.
     Returns: (brainstorm_content, experts_list)
     """
+    context_str = format_conversation_history(history or [])
+    context_section = f"\n<conversation_context>\n{context_str}\n</conversation_context>" if context_str else ""
+
     brainstorm_prompt = f"""<task>
 You are brainstorming the OPTIMAL expert team for this specific query.
 Your suggestions must be HIGHLY RELEVANT to the query's unique requirements.
 </task>
 
 <user_query>{user_query}</user_query>
+{context_section}
 
 <intent_analysis>
 {intent_analysis}
@@ -137,6 +170,7 @@ Create a team of {NUM_EXPERTS} HIGHLY RELEVANT experts with SPECIFIC roles align
 </task>
 
 <user_query>{user_query}</user_query>
+{context_section}
 
 <intent_analysis>
 {intent_analysis}
@@ -236,11 +270,15 @@ async def get_expert_contribution(
     expert: Dict[str, str], 
     contributions: List[Dict[str, Any]], 
     order: int,
-    intent_analysis: str
+    intent_analysis: str,
+    history: List[Dict[str, Any]] = None
 ) -> str:
     """
     Get a contribution from an expert, building on previous work with rigorous quality focus.
     """
+    context_str = format_conversation_history(history or [])
+    conversation_context = f"\n<conversation_context>\n{context_str}\n</conversation_context>" if context_str else ""
+    
     if contributions:
         prior_work = "\n\n---\n\n".join([
             f"**Expert {entry['order']}: {entry['expert']['name']}**\n{entry['contribution']}"
@@ -288,6 +326,7 @@ Your contribution must move the reasoning quality, richness, and depth FORWARD.
 </mission>
 
 <user_query>{user_query}</user_query>
+{conversation_context}
 
 <intent_analysis>
 {intent_analysis}
@@ -333,7 +372,8 @@ Provide your rigorous expert contribution now:"""
 async def stage1_sequential_contributions(
     user_query: str, 
     experts: List[Dict[str, str]],
-    intent_analysis: str
+    intent_analysis: str,
+    history: List[Dict[str, Any]] = None
 ) -> List[Dict[str, Any]]:
     """
     Stage 1: Sequential expert contributions.
@@ -349,7 +389,8 @@ async def stage1_sequential_contributions(
             expert, 
             contributions, 
             order,
-            intent_analysis
+            intent_analysis,
+            history
         )
         
         contributions.append({
@@ -362,8 +403,15 @@ async def stage1_sequential_contributions(
     return contributions
 
 
-async def stage_verification(user_query: str, contributions: List[Dict[str, Any]]) -> str:
+async def stage_verification(
+        user_query: str, 
+        contributions: List[Dict[str, Any]],
+        history: List[Dict[str, Any]] = None
+) -> str:
     """Stage 2.5: Verify key claims from the contributions."""
+    context_str = format_conversation_history(history or [])
+    context_section = f"\n<conversation_context>\n{context_str}\n</conversation_context>" if context_str else ""
+    
     summary = "\n".join([
         f"- Expert {entry['order']} ({entry['expert']['name']}): \"{entry['contribution'][:200]}...\""
         for entry in contributions
@@ -374,6 +422,7 @@ You are a meticulous fact-checker. Review the expert contributions and verify th
 </task>
 
 <user_query>{user_query}</user_query>
+{context_section}
 
 <expert_contributions>
 {summary}
@@ -402,11 +451,15 @@ async def stage_synthesis_planning(
     user_query: str,
     contributions: List[Dict[str, Any]],
     intent_analysis: str,
-    verification_data: str
+    verification_data: str,
+    history: List[Dict[str, Any]] = None
 ) -> str:
     """
     Stage 2.75: Create a structured plan for the chairman.
     """
+    context_str = format_conversation_history(history or [])
+    context_section = f"\n<conversation_context>\n{context_str}\n</conversation_context>" if context_str else ""
+
     contributions_summary = "\n".join([
         f"- Expert {entry['order']} ({entry['expert']['name']}): {entry['contribution'][:300]}..."
         for entry in contributions
@@ -417,6 +470,7 @@ You are the Synthesis Architect. Create a STRUCTURED PLAN for the Chairman's fin
 </task>
 
 <user_query>{user_query}</user_query>
+{context_section}
 
 <intent_analysis>
 {intent_analysis}
@@ -465,18 +519,23 @@ async def stage_editorial_guidelines(
     user_query: str,
     intent_analysis: str,
     contributions: List[Dict[str, Any]],
-    synthesis_plan: str
+    synthesis_plan: str,
+    history: List[Dict[str, Any]] = None
 ) -> str:
     """
     Stage 2.9: Create editorial guidelines for the chairman's writing style.
     Defines tone, voice, style, and formatting for the final synthesis.
     """
+    context_str = format_conversation_history(history or [])
+    context_section = f"\n<conversation_context>\n{context_str}\n</conversation_context>" if context_str else ""
+    
     editorial_prompt = f"""<task>
 You are the Editorial Director. Create detailed writing guidelines for the Chairman's final synthesis.
 The guidelines must ensure the final output's style perfectly matches the user's intent and context.
 </task>
 
 <user_query>{user_query}</user_query>
+{context_section}
 
 <intent_analysis>
 {intent_analysis}
@@ -539,9 +598,12 @@ async def stage3_synthesize_final(
     intent_analysis: str = "",
     verification_data: str = "",
     synthesis_plan: str = "",
-    editorial_guidelines: str = ""
+    editorial_guidelines: str = "",
+    history: List[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """Stage 3: Chairman synthesizes all contributions following the plan and editorial guidelines."""
+    context_str = format_conversation_history(history or [])
+    context_section = f"\n<conversation_context>\n{context_str}\n</conversation_context>" if context_str else ""
     
     contributions_text = "\n\n---\n\n".join([
         f"**Expert {entry['order']}: {entry['expert']['name']}**\n{entry['contribution']}"
@@ -553,9 +615,11 @@ async def stage3_synthesize_final(
 <mission>
 Synthesize all expert contributions into a definitive, world-class artifact that FULLY addresses the user's intent.
 You MUST follow BOTH the Synthesis Plan AND the Editorial Guidelines precisely.
+Maintain continuity with the previous conversation context if it exists.
 </mission>
 
 <user_query>{user_query}</user_query>
+{context_section}
 
 <intent_analysis>
 {intent_analysis}
@@ -628,7 +692,7 @@ Title:"""
     return title[:47] + "..." if len(title) > 50 else title
 
 
-async def run_full_council(user_query: str) -> Tuple[str, List, List, str, str, str, Dict, Dict]:
+async def run_full_council(user_query: str, history: List[Dict[str, Any]] = None) -> Tuple[str, List, List, str, str, str, Dict, Dict]:
     """
     Run the complete sequential expert collaboration process.
     
@@ -636,13 +700,13 @@ async def run_full_council(user_query: str) -> Tuple[str, List, List, str, str, 
         Tuple of (intent_analysis, experts, contributions, verification_data, synthesis_plan, editorial_guidelines, stage3_result, metadata)
     """
     # Stage 0: Analyze intent
-    intent_analysis = await stage0_analyze_intent(user_query)
+    intent_analysis = await stage0_analyze_intent(user_query, history)
     
     # Stage 0.5: Brainstorm and form expert team
-    experts = await stage_brainstorm_experts(user_query, intent_analysis)
+    brainstorm_content, experts = await stage_brainstorm_experts(user_query, intent_analysis, history)
     
     # Stage 1: Sequential expert contributions
-    contributions = await stage1_sequential_contributions(user_query, experts, intent_analysis)
+    contributions = await stage1_sequential_contributions(user_query, experts, intent_analysis, history)
     
     if not contributions:
         return intent_analysis, experts, [], "", "", "", {
@@ -651,14 +715,15 @@ async def run_full_council(user_query: str) -> Tuple[str, List, List, str, str, 
         }, {}
     
     # Stage 2.5: Verification
-    verification_data = await stage_verification(user_query, contributions)
+    verification_data = await stage_verification(user_query, contributions, history)
     
     # Stage 2.75: Synthesis Planning
     synthesis_plan = await stage_synthesis_planning(
         user_query, 
         contributions, 
         intent_analysis, 
-        verification_data
+        verification_data,
+        history
     )
     
     # Stage 2.9: Editorial Guidelines
@@ -666,7 +731,8 @@ async def run_full_council(user_query: str) -> Tuple[str, List, List, str, str, 
         user_query,
         intent_analysis,
         contributions,
-        synthesis_plan
+        synthesis_plan,
+        history
     )
     
     # Stage 3: Final Synthesis
@@ -676,7 +742,8 @@ async def run_full_council(user_query: str) -> Tuple[str, List, List, str, str, 
         intent_analysis=intent_analysis,
         verification_data=verification_data,
         synthesis_plan=synthesis_plan,
-        editorial_guidelines=editorial_guidelines
+        editorial_guidelines=editorial_guidelines,
+        history=history
     )
     
     metadata = {
