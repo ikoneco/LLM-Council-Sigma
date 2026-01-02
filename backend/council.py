@@ -62,20 +62,20 @@ If there is conversation context, analyze how this new query evolves the previou
 <output_format>
 Provide your analysis in Markdown format:
 
-### 🎯 Core Intent
+### Core Intent
 [Explicit + Implicit goals]
 
-### 🧭 Critical Dimensions
+### Critical Dimensions
 - **Strategic**: ...
 - **Tactical**: ...
 - **Technical**: ...
 - **Risks/Edge Cases**: ...
 
-### 💡 Key Assumptions
+### Key Assumptions
 1. ...
 2. ...
 
-### ✅ Success Criteria
+### Success Criteria
 - [What must the final artifact achieve?]
 </output_format>
 
@@ -432,11 +432,11 @@ You are a meticulous fact-checker. Review the expert contributions and verify th
 ## Factual Verification Report
 
 ### Claim 1: [Statement]
-- **Verdict**: ✅ Verified / ⚠️ Partially Accurate / ❌ Incorrect
+- **Verdict**: Verified / Partially Accurate / Incorrect
 - **Evidence**: [Justification]
 
 ### Claim 2: [Statement]
-- **Verdict**: [Emoji]
+- **Verdict**: Verified / Partially Accurate / Incorrect
 - **Evidence**: [Justification]
 </output_format>
 
@@ -487,23 +487,23 @@ You are the Synthesis Architect. Create a STRUCTURED PLAN for the Chairman's fin
 <output_format>
 ## Synthesis Plan for Chairman
 
-### 🔴 Critical Missing Elements
+### Critical Missing Elements
 - [What wasn't addressed]
 
-### 🟡 Reasoning Gaps to Address
+### Reasoning Gaps to Address
 - [Logic needing deeper analysis]
 
-### 🔵 Additional Expertise/Data Needed
+### Additional Expertise/Data Needed
 - [Missing facts or evidence]
 
-### 📋 Recommended Structure
+### Recommended Structure
 - [Outline for final artifact]
 
-### ✅ Quality Checklist
+### Quality Checklist
 - [ ] [Requirement 1]
 - [ ] [Requirement 2]
 
-### ⚡ Critical Actions for Chairman
+### Critical Actions for Chairman
 1. [Must-do 1]
 2. [Must-do 2]
 </output_format>
@@ -557,31 +557,31 @@ Consider:
 <output_format>
 ## Editorial Guidelines for Chairman
 
-### 🎭 Voice & Persona
+### Voice & Persona
 - [How should the Chairman "sound"? What character/authority level?]
 
-### 📝 Tone
+### Tone
 - [e.g., Authoritative but accessible, Technical but clear, etc.]
 
-### 🎯 Audience Calibration
+### Audience Calibration
 - **Expertise Level**: [Beginner/Intermediate/Expert]
 - **Assumed Context**: [What the user likely knows]
 - **Avoid**: [Jargon to skip, concepts to not over-explain]
 
-### ✍️ Style Guidelines
+### Style Guidelines
 - **Sentence Structure**: [Short and punchy vs. flowing and detailed]
 - **Use of Examples**: [When and how to include them]
 - **Technical Depth**: [How deep to go]
 
-### 📐 Formatting Instructions
+### Formatting Instructions
 - **Length Target**: [word count or section count]
 - **Structure**: [How to organize the response]
 - **Visual Elements**: [Use of headers, bullets, bold, etc.]
 
-### ⚠️ Style Anti-Patterns
-- [What to explicitly AVOID in the writing]
+### Style Anti-Patterns
+- **Avoid**: [What to explicitly AVOID in the writing]
 
-### 💎 Quality Bar
+### Quality Bar
 - [What makes this response "excellent" vs. "adequate"]
 </output_format>
 

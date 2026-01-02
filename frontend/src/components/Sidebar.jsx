@@ -1,4 +1,5 @@
 import React from 'react';
+import { LayoutGrid, Plus, MessageSquare, Trash2 } from 'lucide-react';
 import './Sidebar.css';
 
 export default function Sidebar({
@@ -25,16 +26,13 @@ export default function Sidebar({
     setConfirmingId(null);
 
     try {
-      // 1. Trigger the API call and wait for it
       await onDeleteConversation(id);
-      // Item will be removed from state by onEvent
     } catch (error) {
       console.error("Deletion failed:", error);
       setDeletingId(null);
     }
   };
 
-  // Reset confirmation if clicking elsewhere
   React.useEffect(() => {
     const handleClickOutside = () => setConfirmingId(null);
     window.addEventListener('click', handleClickOutside);
@@ -44,9 +42,13 @@ export default function Sidebar({
   return (
     <div className="sidebar">
       <div className="sidebar-header">
-        <h1>LLM Council</h1>
+        <div className="app-branding">
+          <LayoutGrid size={24} color="var(--color-primary)" />
+          <h1>LLM Council</h1>
+        </div>
         <button className="new-conversation-btn" onClick={onNewConversation}>
-          + New Conversation
+          <Plus size={18} />
+          <span>New Chat</span>
         </button>
       </div>
 
@@ -64,6 +66,9 @@ export default function Sidebar({
               `}
               onClick={() => onSelectConversation(conv.id)}
             >
+              <div className="conversation-icon">
+                <MessageSquare size={18} />
+              </div>
               <div className="conversation-content">
                 <div className="conversation-title">
                   {conv.title || 'New Conversation'}
@@ -77,9 +82,10 @@ export default function Sidebar({
                 {confirmingId === conv.id ? (
                   <button
                     className="confirm-delete-btn"
-                    onClick={(e) => executeDelete(conv.id)}
+                    onClick={() => executeDelete(conv.id)}
+                    title="Confirm Delete"
                   >
-                    Delete
+                    <Trash2 size={16} />
                   </button>
                 ) : (
                   <button
@@ -87,7 +93,7 @@ export default function Sidebar({
                     onClick={(e) => handleDeleteQuery(e, conv.id)}
                     title="Delete Conversation"
                   >
-                    ×
+                    <Trash2 size={16} />
                   </button>
                 )}
               </div>

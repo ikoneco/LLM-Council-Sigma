@@ -1,5 +1,6 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Bot, User } from 'lucide-react';
 import './ContributionsStage.css';
 
 export default function ContributionsStage({ contributions, loading, currentOrder }) {
@@ -25,38 +26,37 @@ export default function ContributionsStage({ contributions, loading, currentOrde
             <div className="contributions-timeline">
                 {contributions.map((entry, index) => (
                     <div key={index} className={`contribution-entry order-${entry.order}`}>
-                        <div className="entry-header">
-                            <div className="order-badge">Expert {entry.order}</div>
-                            <div className="expert-name">{entry.expert?.name || 'Expert'}</div>
-                        </div>
+                        {/* Timeline Badge */}
+                        <div className="order-badge">{entry.order}</div>
 
-                        {entry.expert?.description && (
-                            <div className="expert-mandate">{entry.expert.description}</div>
-                        )}
-
-                        <div className="entry-contribution markdown-content">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                {entry.contribution}
-                            </ReactMarkdown>
-                        </div>
-
-                        {index < contributions.length - 1 && (
-                            <div className="contribution-connector">
-                                <span className="connector-arrow">↓</span>
-                                <span className="connector-text">builds upon</span>
+                        {/* Content Card */}
+                        <div className="expert-content-card">
+                            <div className="entry-header">
+                                <Bot size={20} className="mr-2 text-primary" color="var(--color-primary)" style={{ marginRight: '8px' }} />
+                                <span className="expert-name">{entry.expert?.name || 'Expert'}</span>
                             </div>
-                        )}
+
+                            {entry.expert?.description && (
+                                <div className="expert-mandate">{entry.expert.description}</div>
+                            )}
+
+                            <div className="entry-contribution markdown-content">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                    {entry.contribution}
+                                </ReactMarkdown>
+                            </div>
+                        </div>
                     </div>
                 ))}
 
                 {loading && currentOrder > contributions.length && (
                     <div className="contribution-entry loading">
-                        <div className="entry-header">
-                            <div className="order-badge pending">Expert {currentOrder}</div>
-                        </div>
-                        <div className="stage-loading">
-                            <div className="spinner"></div>
-                            <span>Expert {currentOrder} is contributing...</span>
+                        <div className="order-badge pending">{currentOrder}</div>
+                        <div className="expert-content-card">
+                            <div className="stage-loading">
+                                <div className="spinner"></div>
+                                <span>Expert {currentOrder} is contributing...</span>
+                            </div>
                         </div>
                     </div>
                 )}

@@ -1,28 +1,38 @@
 .stage.stage3 {
-  background: linear-gradient(135deg, #ecfdf5, #d1fae5);
-  border-color: #a7f3d0;
+  margin-top: 48px;
 }
 
 .final-response {
-  background: #ffffff;
-  padding: 24px 28px;
-  border-radius: 12px;
-  border: 1px solid #a7f3d0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  background: var(--color-surface);
+  /* No border, just clean page look */
+  padding: 0;
+  /* Assume it mixes with page bg, or is distinct? */
+  background: transparent;
+}
+
+/* Actually, Stage 3 is the 'Answer'. It should look like the definitive content. */
+/* We'll make it look like a clean document section without a card container, 
+   except maybe subtle separation. */
+
+.final-response {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border);
 }
 
 .chairman-label {
-  color: #059669;
-  font-size: 12px;
-  font-family: 'SF Mono', 'Menlo', monospace;
-  margin-bottom: 16px;
+  color: var(--color-primary);
+  font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.1em;
+  margin-bottom: 24px;
 }
 
 .final-text {
-  color: #1e293b;
-  line-height: 1.75;
-  font-size: 15px;
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: var(--color-text-main);
 }

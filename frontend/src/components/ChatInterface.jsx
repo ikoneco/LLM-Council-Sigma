@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { ClipboardList, PenTool, BrainCircuit, CheckCircle2, Target, Ruler, Mic, MessageCircle, AlertTriangle, Gem, Hash, Compass, Sparkles, Gavel } from 'lucide-react';
 import Stage0 from './Stage0';
 import ContributionsStage from './ContributionsStage';
 import Stage3 from './Stage3';
@@ -61,6 +62,31 @@ export default function ChatInterface({
     a({ href, children }) {
       return <a href={href} target="_blank" rel="noopener noreferrer" className="styled-link">{children}</a>;
     },
+    h3({ children }) {
+      const text = String(children);
+      // Strip leading emojis or symbols (non-alphanumeric start)
+      const cleanText = text.replace(/^[\p{Emoji}\u2000-\u3300\uF000-\uFFFF]+\s*/u, '').trim();
+
+      let Icon = Sparkles;
+      if (cleanText.includes('Audience')) Icon = Target;
+      else if (cleanText.includes('Style')) Icon = PenTool;
+      else if (cleanText.includes('Formatting')) Icon = Ruler;
+      else if (cleanText.includes('Voice')) Icon = Mic;
+      else if (cleanText.includes('Tone')) Icon = MessageCircle;
+      else if (cleanText.includes('Anti-Patterns')) Icon = AlertTriangle;
+      else if (cleanText.includes('Quality')) Icon = Gem;
+      else if (cleanText.includes('Intent')) Icon = Target;
+      else if (cleanText.includes('Dimensions')) Icon = Compass;
+      else if (cleanText.includes('Claim')) Icon = CheckCircle2;
+      else if (cleanText.includes('Verdict')) Icon = Gavel;
+
+      return (
+        <h3 className="markdown-header-with-icon" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', lineHeight: '1.4' }}>
+          <Icon size={20} className="header-icon" style={{ marginTop: '3px', flexShrink: 0 }} />
+          <span>{cleanText}</span>
+        </h3>
+      );
+    }
   };
 
   if (!conversation) {
@@ -112,7 +138,10 @@ export default function ChatInterface({
                   {/* Brainstorm Stage */}
                   {(msg.loading?.brainstorm || msg.brainstorm_content) && (
                     <div className="stage brainstorm-stage">
-                      <h3 className="stage-title">🧠 Expert Brainstorm</h3>
+                      <h3 className="stage-title">
+                        <BrainCircuit size={18} />
+                        Expert Brainstorm
+                      </h3>
                       {msg.loading?.brainstorm ? (
                         <div className="stage-loading">
                           <div className="spinner"></div>
@@ -142,7 +171,10 @@ export default function ChatInterface({
                   {/* Verification */}
                   {(msg.loading?.verification || msg.metadata?.verification_data) && (
                     <div className="stage verification-stage">
-                      <h3 className="stage-title">🔬 Factual Verification</h3>
+                      <h3 className="stage-title">
+                        <CheckCircle2 size={18} />
+                        Factual Verification
+                      </h3>
                       {msg.loading?.verification ? (
                         <div className="stage-loading">
                           <div className="spinner"></div>
@@ -163,7 +195,10 @@ export default function ChatInterface({
                   {/* Synthesis Planning */}
                   {(msg.loading?.planning || msg.metadata?.synthesis_plan) && (
                     <div className="stage planning-stage">
-                      <h3 className="stage-title">📋 Synthesis Planning</h3>
+                      <h3 className="stage-title">
+                        <ClipboardList size={18} />
+                        Synthesis Planning
+                      </h3>
                       {msg.loading?.planning ? (
                         <div className="stage-loading">
                           <div className="spinner"></div>
@@ -184,7 +219,10 @@ export default function ChatInterface({
                   {/* Editorial Guidelines */}
                   {(msg.loading?.editorial || msg.metadata?.editorial_guidelines) && (
                     <div className="stage editorial-stage">
-                      <h3 className="stage-title">✍️ Editorial Guidelines</h3>
+                      <h3 className="stage-title">
+                        <PenTool size={18} />
+                        Editorial Guidelines
+                      </h3>
                       {msg.loading?.editorial ? (
                         <div className="stage-loading">
                           <div className="spinner"></div>
@@ -235,23 +273,30 @@ export default function ChatInterface({
             disabled={isLoading}
             title="Start a new thread"
           >
-            + New
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
           </button>
           <textarea
             className="message-input"
-            placeholder="Ask your question..."
+            placeholder="Ask a question..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isLoading}
-            rows={2}
+            rows={1}
           />
           <button
             type="submit"
             className="send-button"
             disabled={!input.trim() || isLoading}
+            title="Send message"
           >
-            Send
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
           </button>
         </form>
       </div>
