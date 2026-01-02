@@ -92,6 +92,11 @@ export default function ChatInterface({
     }
   };
 
+  const hasChairmanOutput = conversation?.messages?.some((msg) => msg?.stage3?.response);
+  const inputPlaceholder = hasChairmanOutput
+    ? 'Add instructions to evolve the Chairman output...'
+    : 'Ask a question...';
+
   const markdownComponents = {
     code({ inline, className, children, ...props }) {
       return inline ? (
@@ -367,6 +372,26 @@ export default function ChatInterface({
 
       <div className="input-area">
         <div className="input-stack">
+          <div className="thread-controls">
+            <div className="thread-status">
+              <span className="thread-status-label">
+                {selectionLocked ? 'Continuing this thread' : 'New thread'}
+              </span>
+              <span className="thread-status-sub">
+                {selectionLocked
+                  ? 'Uses prior Chairman outputs as context.'
+                  : 'Select models and start a fresh cycle.'}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="thread-new-button"
+              onClick={onNewConversation}
+              disabled={isLoading}
+            >
+              Start new thread
+            </button>
+          </div>
           {!selectionLocked && (
             <ModelSelector
               availableModels={availableModels}
@@ -382,21 +407,9 @@ export default function ChatInterface({
             />
           )}
           <form className="input-form" onSubmit={handleSubmit}>
-            <button
-              type="button"
-              className="new-topic-button"
-              onClick={onNewConversation}
-              disabled={isLoading}
-              title="Start a new thread"
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-              </svg>
-            </button>
             <textarea
               className="message-input"
-              placeholder="Ask a question..."
+              placeholder={inputPlaceholder}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}

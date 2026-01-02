@@ -187,6 +187,56 @@
   align-items: center;
 }
 
+.thread-controls {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 4px;
+}
+
+.thread-status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.thread-status-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.thread-status-sub {
+  font-size: 0.85rem;
+  color: var(--color-text-sub);
+}
+
+.thread-new-button {
+  border: 1px solid var(--color-border);
+  background: #FFFFFF;
+  color: var(--color-text-main);
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.thread-new-button:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 10px rgba(15, 82, 186, 0.15);
+}
+
+.thread-new-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .input-form {
   background: #FFFFFF;
   border-radius: 30px;
@@ -227,7 +277,6 @@
 }
 
 /* Buttons with Icons */
-.new-topic-button,
 .send-button {
   width: 40px;
   height: 40px;
@@ -243,23 +292,16 @@
   padding: 0;
 }
 
-.new-topic-button {
-  color: var(--color-text-muted);
-  margin-right: 4px;
-}
-
 .send-button {
   color: var(--color-primary);
   margin-left: 4px;
 }
 
-.new-topic-button:hover,
 .send-button:hover:not(:disabled) {
   background: var(--color-surface-highlight);
   color: var(--color-text-main);
 }
 
-.new-topic-button svg,
 .send-button svg {
   display: block;
   /* Ensure no extra spacing */

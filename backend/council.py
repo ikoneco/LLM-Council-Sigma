@@ -52,7 +52,7 @@ def format_conversation_history(history: List[Dict[str, Any]]) -> str:
                 response = msg["content"]
             
             if response:
-                formatted.append(f"### 🤖 Chairman (Previous Output):\n{response}")
+                formatted.append(f"### 🤖 Chairman (Previous Output - Baseline Context):\n{response}")
                 
     return "\n".join(formatted)
 
@@ -70,7 +70,7 @@ async def stage0_analyze_intent(user_query: str, history: List[Dict[str, Any]] =
 <task>
 Deeply analyze the user query to understand their EXPLICIT and IMPLICIT intent.
 Do NOT select experts yet - that happens in a later brainstorm stage.
-If there is conversation context, analyze how this new query evolves the previous discussion.
+If there is conversation context, treat the most recent Chairman output as the baseline and interpret the new query as additional instructions or refinements.
 </task>
 
 <query>{user_query}</query>
