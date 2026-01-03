@@ -33,6 +33,8 @@ export default function ChatInterface({
     'qwen/qwen3-235b-a22b-2507',
     'openai/gpt-5.2',
     'google/gemini-3-flash-preview',
+    'xiaomi/mimo-v2-flash:free',
+    'mistralai/devstral-2512:free',
   ];
 
   const availableModels = modelCatalog?.available_models || fallbackAvailableModels;
@@ -155,6 +157,8 @@ export default function ChatInterface({
       'qwen/qwen3-235b-a22b-2507': 'qwen/3-235b',
       'openai/gpt-5.2': 'openai/gpt-5.2',
       'google/gemini-3-flash-preview': 'gemini-3-flash',
+      'xiaomi/mimo-v2-flash:free': 'xiaomi/mimo-v2-flash:free',
+      'mistralai/devstral-2512:free': 'mistral/devstral-2512',
     };
 
     return labelMap[model] || model;

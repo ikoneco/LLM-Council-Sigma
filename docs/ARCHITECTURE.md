@@ -131,6 +131,8 @@ The pool of models used for expert roles. Currently configured with 8 models:
 6. `qwen/qwen3-235b-a22b-2507`
 7. `openai/gpt-5.2`
 8. `google/gemini-3-flash-preview`
+9. `xiaomi/mimo-v2-flash:free`
+10. `mistralai/devstral-2512:free`
 
 ### Chairman (`CHAIRMAN_MODEL`)
 

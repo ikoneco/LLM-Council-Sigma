@@ -18,6 +18,8 @@ COUNCIL_MODELS = [
     "qwen/qwen3-235b-a22b-2507",
     "openai/gpt-5.2",
     "google/gemini-3-flash-preview",
+    "xiaomi/mimo-v2-flash:free",
+    "mistralai/devstral-2512:free",
 ]
 
 # Full list of selectable models (chairman + experts)
@@ -30,6 +32,8 @@ AVAILABLE_MODELS = [
     "qwen/qwen3-235b-a22b-2507",
     "openai/gpt-5.2",
     "google/gemini-3-flash-preview",
+    "xiaomi/mimo-v2-flash:free",
+    "mistralai/devstral-2512:free",
 ]
 
 # Selection rules
