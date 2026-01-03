@@ -5,7 +5,7 @@
 
 ## 1. Project Overview
 
-**LLM Council** is an advanced diverse-intelligence orchestration system that solves complex user queries by assembling a custom team of LLM experts. Unlike standard chat interfaces, it uses a **7-Stage Sequential Collaboration Pipeline** preceded by a model selection phase where users choose the Chairman and expert model pool.
+**LLM Council** is an advanced diverse-intelligence orchestration system that solves complex user queries by assembling a custom team of LLM experts. Unlike standard chat interfaces, it uses an **8-stage Sequential Collaboration Pipeline** preceded by a model selection phase and an intent clarification loop.
 
 ### Core Philosophy
 
@@ -30,7 +30,8 @@ graph TD
     FE -->|Stream Request| BE[Backend FastAPI]
     
     subgraph "Backend Orchestration (council.py)"
-        MS[Model Selection] --> S0[Stage 0: Intent Analysis]
+        MS[Model Selection] --> ID[Intent Draft + Clarification]
+        ID --> S0[Stage 0: Final Intent Analysis]
         S0 --> B0[Stage 0.5: Brainstorm]
         B0 --> S1[Stage 1: Expert Contributions]
         S1 --> V1[Stage 2.5: Verification]
@@ -66,41 +67,47 @@ All orchestration logic resides in `backend/council.py`.
 - **Rules**: At least 6 expert models must be selected
 - **Output**: Model selection metadata stored with the message
 
-### 1. Intent Analysis (`stage0_analyze_intent`)
+### 1. Intent Draft + Clarification (`stage0_generate_intent_draft`)
 
-- **Input**: User query.
-- **Goal**: Understand explicit/implicit goals and constraints.
-- **Output**: JSON `intent_analysis`.
+- **Input**: User query + optional conversation context.
+- **Goal**: Produce a draft intent model and 3–6 clarification questions.
+- **Output**: `intent_draft`, `intent_display`, and `clarification_questions` for the UI.
 
-### 2. Expert Brainstorm (`stage_brainstorm_experts`)
+### 2. Final Intent Analysis (`stage0_finalize_intent`)
+
+- **Input**: User query + draft intent + clarification answers (or skip).
+- **Goal**: Lock a final intent packet used by the rest of the pipeline.
+- **Output**: Markdown intent analysis + structured JSON packet.
+
+### 3. Expert Brainstorm (`stage_brainstorm_experts`)
 
 - **Process**: All selected expert models generate expert suggestions in parallel.
 - **Synthesis**: Chairman model synthesizes the final expert team.
 - **Output**: List of experts with specific Roles, Tasks (50+ words), and Measurable Objectives.
 
-### 3. Sequential Contributions (`stage1_sequential_contributions`)
+### 4. Sequential Contributions (`stage1_sequential_contributions`)
 
 - **Process**: Experts run sequentially based on the selected pool.
 - **Context**: Each expert sees the query, intent, and *all prior contributions*.
 - **Quality Control**: Prompts mandate finding inaccuracies/assumptions in previous work before adding new value.
 - **Model Rotation**: Models are rotated round-robin from the selected expert pool.
 
-### 4. Verification (`stage_verification`)
+### 5. Verification (`stage_verification`)
 
 - **Process**: Meticulous fact-checker + reasoning auditor reviews critical claims and logic across contributions.
 - **Output**: Factual corrections plus reasoning issues (gaps, inconsistencies, logical flaws, assumptions).
 
-### 5. Synthesis Planning (`stage_synthesis_planning`)
+### 6. Synthesis Planning (`stage_synthesis_planning`)
 
 - **Process**: "Synthesis Architect" defines a roadmap for the final output.
 - **Output**: Missing elements, reasoning gaps, recommended structure, checklist.
 
-### 6. Editorial Guidelines (`stage_editorial_guidelines`)
+### 7. Editorial Guidelines (`stage_editorial_guidelines`)
 
 - **Process**: "Editorial Director" defines the voice, tone, and style.
 - **Output**: Guidelines for audience calibration, formatting, and "anti-patterns".
 
-### 7. Final Synthesis (`stage3_synthesize_final`)
+### 8. Final Synthesis (`stage3_synthesize_final`)
 
 - **Process**: Chairman (High-intelligence model) writes the final response.
 - **Mandate**: Must follow Synthesis Plan + Editorial Guidelines + verification data.
@@ -154,6 +161,7 @@ Council/
 │   │   ├── components/
 │   │   │   ├── ChatInterface.jsx   # Main view, renders stages
 │   │   │   ├── ModelSelector.jsx   # Pre-stage model selection UI
+│   │   │   ├── IntentClarificationStage.jsx # Intent understanding + Q&A loop
 │   │   │   ├── ContributionsStage.jsx # Visualization of Experts 1-N
 │   │   │   ├── Stage0.jsx          # Intent & Team display
 │   │   │   └── Stage3.jsx          # Final Artifact display

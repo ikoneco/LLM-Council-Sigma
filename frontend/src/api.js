@@ -153,4 +153,57 @@ export const api = {
       }
     }
   },
+
+  /**
+   * Continue a message after clarifications.
+   * @param {string} conversationId - The conversation ID
+   * @param {object} clarificationPayload - Clarification answers + skip flag
+   * @param {function} onEvent - Callback function for each event
+   * @returns {Promise<void>}
+   */
+  async continueMessageStream(conversationId, clarificationPayload, onEvent) {
+    const response = await fetch(
+      `${API_BASE}/api/conversations/${conversationId}/message/continue`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(clarificationPayload),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error('Failed to continue message');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        if (!trimmedLine) continue;
+
+        if (trimmedLine.startsWith('data: ')) {
+          const data = trimmedLine.slice(6);
+          try {
+            const event = JSON.parse(data);
+            onEvent(event.type, event);
+          } catch (e) {
+            console.error('Failed to parse SSE event:', e, trimmedLine);
+          }
+        }
+      }
+    }
+  },
 };

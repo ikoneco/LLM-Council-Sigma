@@ -10,31 +10,42 @@ export default function Stage0({ data, experts }) {
 
     if (!analysis) return null;
 
+    const renderHeader = ({ children, level }) => {
+        const text = String(children);
+        const cleanText = text.replace(/^[\p{Emoji}\u2000-\u3300\uF000-\uFFFF]+\s*/u, '').trim();
+
+        let Icon = Target;
+        if (cleanText.includes('Core Intent')) Icon = Target;
+        else if (cleanText.includes('Critical Dimensions')) Icon = Compass;
+        else if (cleanText.includes('Assumptions')) Icon = Lightbulb;
+        else if (cleanText.includes('Success Criteria')) Icon = CheckCircle2;
+        else if (cleanText.includes('Final Intent Summary')) Icon = Target;
+        else if (cleanText.includes('Intent Packet')) Icon = Compass;
+
+        const Tag = level === 2 ? 'h2' : 'h3';
+
+        return (
+            <Tag className="markdown-header-with-icon" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '16px', marginBottom: '8px' }}>
+                <Icon size={18} style={{ color: 'var(--color-primary)' }} />
+                {cleanText}
+            </Tag>
+        );
+    };
+
     const markdownComponents = {
-        h3({ children }) {
-            const text = String(children);
-            const cleanText = text.replace(/^[\p{Emoji}\u2000-\u3300\uF000-\uFFFF]+\s*/u, '').trim();
-
-            let Icon = Target;
-            if (cleanText.includes('Core Intent')) Icon = Target;
-            else if (cleanText.includes('Critical Dimensions')) Icon = Compass;
-            else if (cleanText.includes('Assumptions')) Icon = Lightbulb;
-            else if (cleanText.includes('Success Criteria')) Icon = CheckCircle2;
-
-            return (
-                <h3 className="markdown-header-with-icon" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '16px', marginBottom: '8px' }}>
-                    <Icon size={18} style={{ color: 'var(--color-primary)' }} />
-                    {cleanText}
-                </h3>
-            );
-        }
+        h2(props) {
+            return renderHeader({ ...props, level: 2 });
+        },
+        h3(props) {
+            return renderHeader({ ...props, level: 3 });
+        },
     };
 
     return (
         <div className="stage stage0">
             <h3 className="stage-title">
                 <Target size={18} />
-                Intent Analysis
+                Intent Brief
             </h3>
 
             <div className="intent-analysis">

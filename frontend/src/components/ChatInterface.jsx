@@ -6,11 +6,13 @@ import Stage0 from './Stage0';
 import ContributionsStage from './ContributionsStage';
 import Stage3 from './Stage3';
 import ModelSelector from './ModelSelector';
+import IntentClarificationStage from './IntentClarificationStage';
 import './ChatInterface.css';
 
 export default function ChatInterface({
   conversation,
   onSendMessage,
+  onContinueMessage,
   onNewConversation,
   isLoading,
   modelCatalog,
@@ -186,6 +188,16 @@ export default function ChatInterface({
             const expertList = msg.experts
               || (Array.isArray(msg.stage0?.first_expert) ? msg.stage0.first_expert : null);
             const contributionList = msg.contributions || msg.debate || [];
+            const awaitingClarification = msg.awaiting_clarification ?? (msg.status === 'clarification_pending');
+            const clarificationAnswers = msg.clarification_answers || msg.metadata?.clarification_answers;
+            const intentDisplay = msg.intent_display ?? msg.intent_draft?.display;
+            const draftIntent = msg.intent_draft?.draft_intent || msg.intent_draft;
+            const showClarificationStage = Boolean(
+              msg.intent_draft
+              || msg.intent_display
+              || (msg.clarification_questions && msg.clarification_questions.length > 0)
+              || msg.status?.startsWith('clarification')
+            );
 
             return (
               <div key={index} className="message-group">
@@ -231,11 +243,30 @@ export default function ChatInterface({
                       </div>
                     )}
 
+                    {msg.loading?.intent_draft && (
+                      <div className="stage-loading">
+                        <div className="spinner"></div>
+                        <span>Drafting intent understanding...</span>
+                      </div>
+                    )}
+
+                    {showClarificationStage && (
+                      <IntentClarificationStage
+                        display={intentDisplay}
+                        draftIntent={draftIntent}
+                        questions={msg.clarification_questions}
+                        awaitingClarification={awaitingClarification}
+                        clarificationAnswers={clarificationAnswers}
+                        onSubmit={onContinueMessage}
+                        disabled={isLoading}
+                      />
+                    )}
+
                     {/* Stage 0: Intent Analysis */}
                     {msg.loading?.stage0 && (
                       <div className="stage-loading">
                         <div className="spinner"></div>
-                        <span>Analyzing intent...</span>
+                        <span>Preparing intent brief...</span>
                       </div>
                     )}
                     {msg.stage0 && <Stage0 data={msg.stage0} experts={expertList} />}

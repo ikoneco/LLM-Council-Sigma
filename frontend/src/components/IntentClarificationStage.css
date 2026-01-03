@@ -1,0 +1,177 @@
+.intent-clarification-stage {
+  background: #FFFFFF;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 32px;
+  box-shadow: var(--shadow-sm);
+  margin: 24px 0;
+  position: relative;
+}
+
+.intent-clarification-stage::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #0F52BA, #34A853);
+}
+
+.intent-section {
+  margin-bottom: 20px;
+}
+
+.intent-empty {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.intent-section-title {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.intent-section ul {
+  padding-left: 20px;
+  color: var(--color-text-sub);
+}
+
+.intent-label {
+  font-weight: 600;
+  color: var(--color-text-main);
+}
+
+.intent-questions {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.intent-questions-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.intent-helper-text {
+  font-size: 0.9rem;
+  color: var(--color-text-sub);
+}
+
+.intent-question {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--color-surface-alt);
+}
+
+.intent-question-text {
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--color-text-main);
+}
+
+.intent-options {
+  display: grid;
+  gap: 8px;
+}
+
+.intent-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--color-text-sub);
+}
+
+.intent-option input {
+  accent-color: var(--color-primary);
+}
+
+.intent-other-input {
+  margin-top: 10px;
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: var(--font-base);
+  font-size: 0.9rem;
+}
+
+.intent-free-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.intent-free-text label {
+  font-size: 0.85rem;
+  color: var(--color-text-sub);
+  font-weight: 600;
+}
+
+.intent-free-text textarea {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: var(--font-base);
+  font-size: 0.9rem;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.intent-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.intent-skip-button,
+.intent-continue-button {
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  background: #FFFFFF;
+  color: var(--color-text-main);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.intent-continue-button {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.intent-skip-button:hover:not(:disabled),
+.intent-continue-button:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 10px rgba(15, 82, 186, 0.15);
+}
+
+.intent-skip-button:disabled,
+.intent-continue-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.intent-submitted {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+.intent-skip-note {
+  margin-top: 12px;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}

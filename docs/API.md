@@ -80,6 +80,11 @@ Retrieve the full message history and metadata for a specific conversation.
       },
       {
         "role": "assistant",
+        "status": "clarification_pending",
+        "intent_draft": {...},
+        "intent_display": {...},
+        "clarification_questions": [...],
+        "clarification_answers": {...},
         "stage0": {...},
         "experts": [...],
         "contributions": [...],
@@ -95,9 +100,13 @@ Retrieve the full message history and metadata for a specific conversation.
   }
   ```
 
+  Notes:
+  - `status` values include `clarification_pending`, `clarification_submitted`, and `complete`.
+  - `intent_draft` / `intent_display` / `clarification_questions` appear before the pipeline runs.
+
 ### 5. Send Message (Stream)
 
-Send a user query and receive the streaming multi-stage execution process.
+Send a user query and receive the intent draft + clarification questions.
 
 - **URL**: `/api/conversations/{conversation_id}/message/stream`
 - **Method**: `POST`
@@ -123,11 +132,47 @@ Send a user query and receive the streaming multi-stage execution process.
   Notes:
   - `model_selection` is optional; defaults apply if omitted.
   - `expert_models` must include at least 6 valid models.
+  - The initial stream ends after `clarification_required`; use the continue endpoint to run the full pipeline.
 
 - **Response**: `text/event-stream`
   
   **Event Types**:
-  - `stage0_start` / `stage0_complete`: Intent Analysis
+  - `intent_draft_start` / `intent_draft_complete`: Draft intent analysis + clarification questions
+  - `clarification_required`: Client should prompt the user for answers or skip
+  - `title_complete`: Conversation title updated
+  - `complete`: Stream finished
+  - `error`: Stream failed
+
+### 6. Continue Message (Stream)
+
+Continue a message after clarifications (or skip) and run the full pipeline.
+
+- **URL**: `/api/conversations/{conversation_id}/message/continue`
+- **Method**: `POST`
+- **Body**:
+
+  ```json
+  {
+    "answers": [
+      {
+        "question_id": "q1",
+        "selected_options": ["Option text", "Another option"],
+        "other_text": ""
+      }
+    ],
+    "free_text": "Optional extra context",
+    "skip": false
+  }
+  ```
+
+  Notes:
+  - `skip: true` bypasses clarifications and proceeds with best-effort intent analysis.
+  - `selected_options` supports multi-select responses per question.
+
+- **Response**: `text/event-stream`
+
+  **Event Types**:
+  - `stage0_start` / `stage0_complete`: Final intent analysis (post-clarification)
   - `brainstorm_start` / `brainstorm_complete`: Expert brainstorming & selection (Contains `brainstorm_content` and `experts` list)
   - `contributions_start`: Sequence begins
   - `expert_start` / `expert_complete`: Individual expert contributions (Contains `expert` details and `contribution` text)
@@ -136,11 +181,10 @@ Send a user query and receive the streaming multi-stage execution process.
   - `planning_start` / `planning_complete`: Synthesis plan creation
   - `editorial_start` / `editorial_complete`: Editorial guidelines creation
   - `stage3_start` / `stage3_complete`: Final synthesis artifact regeneration
-  - `title_complete`: Conversation title updated
   - `complete`: Stream finished
   - `error`: Stream failed
 
-### 6. Delete Conversation
+### 7. Delete Conversation
 
 Permanently remove a conversation and its data.
 

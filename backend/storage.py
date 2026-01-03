@@ -220,3 +220,110 @@ def add_assistant_message_debate(
     })
 
     save_conversation(conversation)
+
+
+def add_assistant_message_intent_draft(
+    conversation_id: str,
+    intent_draft: Dict[str, Any],
+    intent_display: Dict[str, Any],
+    questions: List[Dict[str, Any]],
+    metadata: Dict[str, Any] = None
+):
+    """
+    Add an assistant message containing the intent draft and clarification questions.
+    """
+    conversation = get_conversation(conversation_id)
+    if conversation is None:
+        raise ValueError(f"Conversation {conversation_id} not found")
+
+    stored_draft = intent_draft.get("draft_intent") if isinstance(intent_draft, dict) else intent_draft
+
+    conversation["messages"].append({
+        "role": "assistant",
+        "status": "clarification_pending",
+        "intent_draft": stored_draft,
+        "intent_display": intent_display,
+        "clarification_questions": questions,
+        "metadata": metadata or {},
+    })
+
+    save_conversation(conversation)
+
+
+def find_pending_intent_message(
+    conversation_id: str,
+    statuses: Optional[List[str]] = None,
+) -> Optional[tuple]:
+    """
+    Find the most recent assistant message awaiting clarification.
+    Returns (index, message) or None.
+    """
+    conversation = get_conversation(conversation_id)
+    if conversation is None:
+        return None
+
+    if statuses is None:
+        statuses = ["clarification_pending", "clarification_submitted"]
+
+    for idx in range(len(conversation["messages"]) - 1, -1, -1):
+        msg = conversation["messages"][idx]
+        if msg.get("role") == "assistant" and msg.get("status") in statuses:
+            return idx, msg
+    return None
+
+
+def mark_pending_intent_submitted(
+    conversation_id: str,
+    clarification_payload: Dict[str, Any]
+):
+    """
+    Mark the pending intent message as submitted and store clarification answers.
+    """
+    found = find_pending_intent_message(conversation_id)
+    if found is None:
+        raise ValueError(f"No pending intent message for {conversation_id}")
+
+    idx, msg = found
+    conversation = get_conversation(conversation_id)
+    if conversation is None:
+        raise ValueError(f"Conversation {conversation_id} not found")
+
+    msg["status"] = "clarification_submitted"
+    msg["clarification_answers"] = clarification_payload
+    conversation["messages"][idx] = msg
+    save_conversation(conversation)
+
+
+def finalize_intent_message(
+    conversation_id: str,
+    intent_analysis: str,
+    experts: List[Dict[str, Any]],
+    contributions: List[Dict[str, Any]],
+    stage3: Dict[str, Any],
+    metadata: Dict[str, Any]
+):
+    """
+    Update the pending intent message with the full pipeline results.
+    """
+    found = find_pending_intent_message(conversation_id)
+    if found is None:
+        raise ValueError(f"No pending intent message for {conversation_id}")
+
+    idx, msg = found
+    conversation = get_conversation(conversation_id)
+    if conversation is None:
+        raise ValueError(f"Conversation {conversation_id} not found")
+
+    msg.update({
+        "status": "complete",
+        "content": stage3.get("response", ""),
+        "stage0": {"analysis": intent_analysis},
+        "experts": experts,
+        "contributions": contributions,
+        "debate": contributions,
+        "stage3": stage3,
+        "metadata": metadata or {},
+    })
+
+    conversation["messages"][idx] = msg
+    save_conversation(conversation)

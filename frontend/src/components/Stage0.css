@@ -12,10 +12,18 @@
     margin-bottom: 32px;
 }
 
+.analysis-content h2,
 .analysis-content h3 {
     font-family: var(--font-serif);
-    font-size: 1.25rem;
     margin-bottom: 12px;
+}
+
+.analysis-content h2 {
+    font-size: 1.35rem;
+}
+
+.analysis-content h3 {
+    font-size: 1.25rem;
 }
 
 /* Experts Grid */

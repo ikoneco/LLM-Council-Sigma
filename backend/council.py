@@ -1,11 +1,27 @@
 """LLM Council orchestration with sequential expert collaboration."""
 
 from typing import List, Dict, Any, Tuple, Optional
+import json
+import re
 import asyncio
 from .openrouter import query_model
 from .config import COUNCIL_MODELS, CHAIRMAN_MODEL, MIN_EXPERT_MODELS
 
 DEFAULT_NUM_EXPERTS = MIN_EXPERT_MODELS
+
+SUPPORTED_OUTPUT_TYPES = [
+    "plan",
+    "summary",
+    "checklist",
+    "draft",
+    "table",
+    "critique",
+    "rewrite",
+    "research",
+    "extraction",
+    "troubleshooting",
+    "recommendation",
+]
 
 
 def build_default_experts(num_experts: int) -> List[Dict[str, Any]]:
@@ -56,64 +72,468 @@ def format_conversation_history(history: List[Dict[str, Any]]) -> str:
                 
     return "\n".join(formatted)
 
+def _extract_json(text: str) -> Optional[Dict[str, Any]]:
+    if not text:
+        return None
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not match:
+        return None
+    payload = match.group()
+    try:
+        return json.loads(payload)
+    except json.JSONDecodeError:
+        cleaned = re.sub(r",\s*\}", "}", payload)
+        cleaned = re.sub(r",\s*\]", "]", cleaned)
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            return None
 
-async def stage0_analyze_intent(user_query: str, history: List[Dict[str, Any]] = None) -> str:
+
+def _strip_uncertain_intent_fields(intent_draft: Any) -> Dict[str, Any]:
+    if not isinstance(intent_draft, dict):
+        return {}
+    draft = intent_draft.get("draft_intent")
+    if isinstance(draft, dict):
+        base = dict(draft)
+    else:
+        base = dict(intent_draft)
+    base.pop("assumptions", None)
+    base.pop("ambiguities", None)
+    return base
+
+
+def _build_fallback_questions() -> List[Dict[str, Any]]:
+    return [
+        {
+            "id": "q1",
+            "question": "What should the result enable you to do? (Select all that apply)",
+            "options": [
+                "Decide between options",
+                "Execute a plan",
+                "Communicate to stakeholders",
+                "Learn/understand a topic",
+                "Produce a draft or outline",
+                "Other / I'll type it",
+            ],
+        },
+        {
+            "id": "q2",
+            "question": "Who is the intended audience?",
+            "options": [
+                "Me (individual use)",
+                "A cross-functional team",
+                "Executives/stakeholders",
+                "Customers/end-users",
+                "Other / I'll type it",
+            ],
+        },
+        {
+            "id": "q3",
+            "question": "What format should I produce?",
+            "options": [
+                "Step-by-step plan",
+                "Bullet summary",
+                "Table comparison",
+                "Draft document",
+                "Other / I'll type it",
+            ],
+        },
+        {
+            "id": "q4",
+            "question": "How deep or rigorous should this be?",
+            "options": [
+                "Quick overview",
+                "Standard depth",
+                "Deep and detailed (edge cases)",
+                "Other / I'll type it",
+            ],
+        },
+        {
+            "id": "q5",
+            "question": "Any hard constraints I must follow? (Select all that apply)",
+            "options": [
+                "Use only what I provided",
+                "Include citations/sources",
+                "Timeboxed or short output",
+                "Avoid specific topics/approaches",
+                "Other / I'll type it",
+            ],
+        },
+    ]
+
+
+def _normalize_intent_draft(raw: Optional[Dict[str, Any]], user_query: str) -> Dict[str, Any]:
+    fallback_questions = _build_fallback_questions()
+
+    if not raw:
+        return {
+            "draft_intent": {
+                "primary_intent": user_query,
+                "task_type": "explanation",
+                "deliverable": {
+                    "format": "bullet summary",
+                    "depth": "standard",
+                    "tone": "neutral",
+                },
+                "explicit_constraints": [],
+                "latent_intent_hypotheses": [],
+                "ambiguities": [],
+                "assumptions": [],
+                "confidence": "low",
+            },
+            "display": {
+                "understanding": [user_query],
+                "assumptions": [],
+                "unclear": [],
+            },
+            "questions": fallback_questions,
+        }
+
+    draft = raw.get("draft_intent") or raw.get("draft") or raw.get("intent_draft") or {}
+    display = raw.get("display") or raw.get("summary") or {}
+    questions = raw.get("questions") or raw.get("clarification_questions") or []
+
+    if not isinstance(questions, list):
+        questions = []
+
+    normalized_questions = []
+    for idx, item in enumerate(questions, start=1):
+        if not isinstance(item, dict):
+            continue
+        q_id = item.get("id") or f"q{idx}"
+        question_text = item.get("question") or item.get("prompt") or ""
+        options = item.get("options") or []
+        if not isinstance(options, list):
+            options = []
+        if "Other / I'll type it" not in options:
+            options.append("Other / I'll type it")
+        normalized_questions.append({
+            "id": q_id,
+            "question": question_text.strip() or f"Clarification {idx}",
+            "options": options[:6],
+        })
+
+    if len(normalized_questions) < 3:
+        needed = 3 - len(normalized_questions)
+        for fallback in fallback_questions:
+            if needed <= 0:
+                break
+            if fallback["question"] in {q["question"] for q in normalized_questions}:
+                continue
+            normalized_questions.append(fallback)
+            needed -= 1
+
+    normalized_questions = normalized_questions[:6]
+
+    deliverable_raw = draft.get("deliverable") or {}
+    if not isinstance(deliverable_raw, dict):
+        deliverable_raw = {}
+
+    deliverable = {
+        "format": deliverable_raw.get("format") or "bullet summary",
+        "depth": deliverable_raw.get("depth") or "standard",
+        "tone": deliverable_raw.get("tone") or "neutral",
+        "structure": deliverable_raw.get("structure") or "",
+        "required_elements": deliverable_raw.get("required_elements") or [],
+    }
+    if not isinstance(deliverable["required_elements"], list):
+        deliverable["required_elements"] = []
+
+    explicit_constraints = draft.get("explicit_constraints") or []
+    if not isinstance(explicit_constraints, list):
+        explicit_constraints = []
+
+    constraints_raw = draft.get("constraints") or {}
+    if not isinstance(constraints_raw, dict):
+        constraints_raw = {}
+
+    constraints = {
+        "must": constraints_raw.get("must") or [],
+        "should": constraints_raw.get("should") or [],
+        "must_not": constraints_raw.get("must_not") or [],
+    }
+    for key in ("must", "should", "must_not"):
+        if not isinstance(constraints[key], list):
+            constraints[key] = []
+
+    if explicit_constraints:
+        existing = {item for item in constraints["must"] if isinstance(item, str)}
+        for item in explicit_constraints:
+            if isinstance(item, str) and item not in existing:
+                constraints["must"].append(item)
+
+    quality_bar = draft.get("quality_bar") or {}
+    if not isinstance(quality_bar, dict):
+        quality_bar = {}
+
+    success_criteria = draft.get("success_criteria") or []
+    if not isinstance(success_criteria, list):
+        success_criteria = []
+
+    latent_hypotheses = draft.get("latent_intent_hypotheses") or []
+    if not isinstance(latent_hypotheses, list):
+        latent_hypotheses = []
+
+    ambiguities = draft.get("ambiguities") or []
+    if not isinstance(ambiguities, list):
+        ambiguities = []
+
+    assumptions = draft.get("assumptions") or []
+    if not isinstance(assumptions, list):
+        assumptions = []
+
+    draft_intent = {
+        "primary_intent": draft.get("primary_intent") or draft.get("primary_goal") or user_query,
+        "goal_outcome": draft.get("goal_outcome") or draft.get("goal") or draft.get("outcome") or user_query,
+        "task_type": draft.get("task_type") or "explanation",
+        "deliverable": deliverable,
+        "audience": draft.get("audience") or draft.get("target_audience") or "",
+        "constraints": constraints,
+        "quality_bar": quality_bar,
+        "success_criteria": success_criteria,
+        "explicit_constraints": explicit_constraints,
+        "latent_intent_hypotheses": latent_hypotheses,
+        "ambiguities": ambiguities,
+        "assumptions": assumptions,
+        "confidence": draft.get("confidence") or "medium",
+    }
+
+    understanding = display.get("understanding") or []
+    if not isinstance(understanding, list):
+        understanding = []
+    if not understanding:
+        understanding = [draft_intent["primary_intent"]]
+
+    assumptions_display = display.get("assumptions") or []
+    if not isinstance(assumptions_display, list):
+        assumptions_display = []
+
+    unclear_display = display.get("unclear") or []
+    if not isinstance(unclear_display, list):
+        unclear_display = []
+
+    display_payload = {
+        "understanding": understanding,
+        "assumptions": assumptions_display,
+        "unclear": unclear_display,
+    }
+
+    return {
+        "draft_intent": draft_intent,
+        "display": display_payload,
+        "questions": normalized_questions,
+    }
+
+
+async def stage0_generate_intent_draft(
+    user_query: str,
+    history: List[Dict[str, Any]] = None,
+    analysis_model: Optional[str] = None,
+) -> Dict[str, Any]:
     """
-    Stage 0: Master Intent Architect.
-    Analyze the user's intent deeply - expert selection happens in brainstorm stage.
+    Phase 1: Draft intent analysis + clarification questions.
+    Returns a structured draft payload for UI display.
+    """
+    context_str = format_conversation_history(history or [])
+    context_section = f"\n<conversation_context>\n{context_str}\n</conversation_context>" if context_str else ""
+    product_context = {
+        "supported_output_types": SUPPORTED_OUTPUT_TYPES,
+        "capabilities": [
+            "multi-stage reasoning pipeline",
+            "intent clarification loop",
+            "model selection for chairman and experts",
+        ],
+        "limitations": [
+            "no direct access to private user files unless provided",
+            "web search limited to verification stage",
+        ],
+    }
+
+    intent_prompt = f"""<system>You are an Intent Analyst + Clarification Designer.</system>
+
+<task>
+Turn the raw user request into a draft intent model and 3-6 high-impact clarification questions.
+Optimize for correctness. Go beyond surface-level by inferring likely motivations, context, audience, constraints, success criteria, dependencies, and risk tolerance.
+Separate explicit statements from inferred hypotheses and label uncertainty clearly.
+Ask fewer, higher-leverage questions that resolve the highest-impact unknowns.
+Provide options + "Other / I'll type it". Multi-select options are allowed when appropriate.
+If there is conversation context, treat the most recent Chairman output as the baseline and interpret the new query as additional instructions or refinements.
+</task>
+
+<user_query>{user_query}</user_query>
+{context_section}
+
+<product_context>
+{json.dumps(product_context, indent=2)}
+</product_context>
+
+<output_format>
+Return a JSON object ONLY with this schema:
+{{
+  "draft_intent": {{
+    "primary_intent": "1 sentence",
+    "goal_outcome": "What success enables or produces",
+    "task_type": "explanation|recommendation|plan|critique|rewrite|research|extraction|troubleshooting",
+    "deliverable": {{
+      "format": "bullets|table|steps|outline|doc|etc",
+      "depth": "quick|standard|deep",
+      "tone": "string or null",
+      "structure": "key sections or outline (optional)",
+      "required_elements": ["optional bullets"]
+    }},
+    "audience": "string or null",
+    "constraints": {{
+      "must": ["..."],
+      "should": ["..."],
+      "must_not": ["..."]
+    }},
+    "quality_bar": {{
+      "rigor": "quick|standard|deep",
+      "evidence": "none|light|strict",
+      "completeness": "core|standard|comprehensive",
+      "risk_tolerance": "low|medium|high"
+    }},
+    "success_criteria": ["..."],
+    "explicit_constraints": ["..."],
+    "latent_intent_hypotheses": ["..."],
+    "ambiguities": ["..."],
+  "assumptions": [{{"assumption": "...", "risk": "high|medium|low", "why_it_matters": "..."}}],
+    "confidence": "high|medium|low"
+  }},
+  "display": {{
+    "understanding": ["2-4 short bullets in plain language"],
+    "assumptions": ["2-3 concise bullets that include why the assumption matters"],
+    "unclear": ["2-3 concise bullets of biggest open decisions"]
+  }},
+  "questions": [
+    {{
+      "id": "q1",
+      "question": "text",
+      "options": ["2-5 options", "Other / I'll type it"]
+    }}
+  ]
+}}
+</output_format>
+
+Rules:
+- Provide 3-6 questions.
+- Each question addresses ONE dimension only.
+- Target the highest-impact uncertainties (goal/outcome, scope boundaries, audience, format, constraints, quality bar).
+- Order ambiguities, assumptions, and questions by impact (highest first).
+- Options must be distinct and actionable. Multi-select is allowed when it helps (do not force exclusivity).
+- Avoid vague prompts; every option should imply a different execution path.
+- Always include "Other / I'll type it".
+- Keep the display output human-friendly and scannable; reserve depth for the draft_intent fields.
+
+Generate the JSON now:"""
+
+    messages = [{"role": "user", "content": intent_prompt}]
+    model_name = analysis_model or CHAIRMAN_MODEL
+    response = await query_model(model_name, messages)
+
+    if response is None:
+        return _normalize_intent_draft(None, user_query)
+
+    parsed = _extract_json(response.get("content", ""))
+    return _normalize_intent_draft(parsed, user_query)
+
+
+async def stage0_finalize_intent(
+    user_query: str,
+    intent_draft: Dict[str, Any],
+    clarification_payload: Dict[str, Any],
+    history: List[Dict[str, Any]] = None,
+    analysis_model: Optional[str] = None,
+) -> str:
+    """
+    Phase 3: Final intent packet after clarification (or skip).
+    Returns Markdown intended for display and downstream use.
     """
     context_str = format_conversation_history(history or [])
     context_section = f"\n<conversation_context>\n{context_str}\n</conversation_context>" if context_str else ""
 
-    intent_prompt = f"""<system>You are the Master Intent Architect, an elite cognitive strategist.</system>
+    intent_prompt = f"""<system>You are an Intent Analyst + Clarification Designer.</system>
 
 <task>
-Deeply analyze the user query to understand their EXPLICIT and IMPLICIT intent.
-Do NOT select experts yet - that happens in a later brainstorm stage.
-If there is conversation context, treat the most recent Chairman output as the baseline and interpret the new query as additional instructions or refinements.
+Incorporate the clarifications (if any) into a final intent packet.
+Treat selections as authoritative unless they conflict with explicit user text.
+If the user skipped clarifications, proceed with best-effort and mark remaining uncertainty as assumptions.
+Clarification answers may include multiple selected options per question.
+Ensure the final intent summary uses ALL available input: user query, conversation context, draft intent fields, and clarifications.
+Do NOT ask more questions.
 </task>
 
-<query>{user_query}</query>
+<user_query>{user_query}</user_query>
 {context_section}
 
-<analysis_framework>
-1. **Surface Intent**: What is the user literally asking?
-2. **Deep Intent**: What is the user's ultimate goal? What would "success" look like?
-3. **Critical Dimensions**: What aspects must be covered for a world-class answer?
-4. **Key Assumptions**: What must we assume?
-5. **User Context**: What context clues suggest their expertise level, urgency, or constraints?
-6. **Success Criteria**: How will we know the response fully addressed their need?
-</analysis_framework>
+<intent_draft>
+{json.dumps(_strip_uncertain_intent_fields(intent_draft), indent=2)}
+</intent_draft>
+
+<clarifications>
+{json.dumps(clarification_payload, indent=2)}
+</clarifications>
 
 <output_format>
-Provide your analysis in Markdown format:
+Return Markdown ONLY using this template:
 
-### Core Intent
-[Explicit + Implicit goals]
+## Brainstorm Intent Brief
 
-### Critical Dimensions
-- **Strategic**: ...
-- **Tactical**: ...
-- **Technical**: ...
-- **Risks/Edge Cases**: ...
+### Explicit User Intent
+- Primary ask: ...
+- Implied success criteria: ...
+- Explicit constraints or preferences: ...
 
-### Key Assumptions
-1. ...
-2. ...
+### High-Confidence Implied Intent
+- Implied goals that are strongly supported by the user input: ...
 
-### Success Criteria
-- [What must the final artifact achieve?]
+### Audience & Context
+- Audience: ...
+- Context the expert team must account for: ...
+
+### Deliverable Expectations
+- Format:
+- Depth:
+- Tone:
+- Structure / required elements:
+
+### Quality Bar
+- Rigor:
+- Evidence:
+- Completeness:
+- Risk tolerance:
+
+### Out of Scope
+- Explicit exclusions or non-goals: ...
+
+### Expert Team Guidance
+- Goals the expert team must optimize for: ...
+- Expertise domains to include: ...
+- Must-cover topics: ...
+- De-prioritize / avoid: ...
+
+### Confidence
+- Overall confidence: high|medium|low
 </output_format>
 
-Provide your deep intent analysis now:"""
-    
+Rules:
+- Use only the sections above (no extra headings, no JSON).
+- Ensure every section is present (use "None noted" if empty).
+- Do not include assumptions, guesses, or open questions. If uncertain, omit the item.
+- Ignore draft assumptions/ambiguities unless they were explicitly resolved by user clarifications.
+- Synthesize all available input into a concise, instructive brief for the brainstorm stage.
+
+Provide the intent brief now:"""
+
     messages = [{"role": "user", "content": intent_prompt}]
-    response = await query_model("google/gemini-2.0-flash-001", messages)
-    
+    model_name = analysis_model or CHAIRMAN_MODEL
+    response = await query_model(model_name, messages)
+
     if response is None:
-        return "Analyzing query requirements..."
-    
-    return response.get('content', 'Analyzing query requirements...')
+        return "Intent analysis unavailable."
+
+    return response.get("content", "Intent analysis unavailable.")
 
 
 async def stage_brainstorm_experts(
@@ -862,8 +1282,19 @@ async def run_full_council(
     Returns:
         Tuple of (intent_analysis, experts, contributions, verification_data, synthesis_plan, editorial_guidelines, stage3_result, metadata)
     """
-    # Stage 0: Analyze intent
-    intent_analysis = await stage0_analyze_intent(user_query, history)
+    # Stage 0: Draft + finalize intent (skip clarifications for full run)
+    intent_draft = await stage0_generate_intent_draft(
+        user_query,
+        history,
+        analysis_model=chairman_model,
+    )
+    intent_analysis = await stage0_finalize_intent(
+        user_query,
+        intent_draft,
+        {"skip": True, "answers": [], "free_text": ""},
+        history,
+        analysis_model=chairman_model,
+    )
     
     models = expert_models or COUNCIL_MODELS
     expert_count = num_experts or (len(models) if expert_models else DEFAULT_NUM_EXPERTS)

@@ -7,6 +7,7 @@
 - **Multi-Stage Orchestration**: Moves beyond simple prompting to a state-managed workflow.
 - **Model Selection**: Users choose the Chairman model and a pool of expert models (minimum 6 of 8).
 - **Dynamic Expert Selection**: Automatically identifies the specialized roles needed (e.g., "Senior Product Strategist", "Security Architect") based on the query.
+- **Intent Clarification Loop**: Draft intent understanding + 3–6 high-impact questions (skippable) before the pipeline runs.
 - **Sequential Collaboration**: Experts build upon each other's work, providing deep, layered insights.
 - **Verification & Reasoning Audit**: A dedicated stage checks claims, logic, gaps, and inconsistencies.
 - **Editorial Synthesis**: A final "Chairman" synthesizes all contributions into a cohesive, style-calibrated response (Editorial/Council voice).
@@ -19,13 +20,14 @@
 ## 🔄 The Council Workflow
 
 0. **Model Selection**: Choose the Chairman model and a pool of expert models (minimum 6).
-1. **🎯 Intent Analysis**: The "Master Intent Architect" decodes the explicit and implicit goals of the user.
-2. **🧠 Expert Brainstorm**: Multiple models propose the ideal team of experts.
-3. **👥 Sequential Contributions**: Selected experts (simulated by LLMs) contribute linearly, reviewing and building on prior work.
-4. **🔬 Verification & Reasoning Audit**: A "Meticulous Fact-Checker" validates claims and reasoning.
-5. **📋 Synthesis Planning**: A "Synthesis Architect" outlines the structure for the final answer.
-6. **✍️ Editorial Guidelines**: An "Editorial Director" defines the voice, tone, and formatting.
-7. **🏆 Final Synthesis**: The Chairman produces the final response, integrating all insights.
+1. **🎯 Intent Draft + Clarifications**: The system summarizes its understanding and asks 3–6 high-impact questions (or you can skip).
+2. **✅ Final Intent Analysis**: A locked intent packet is produced for the pipeline.
+3. **🧠 Expert Brainstorm**: Multiple models propose the ideal team of experts.
+4. **👥 Sequential Contributions**: Selected experts (simulated by LLMs) contribute linearly, reviewing and building on prior work.
+5. **🔬 Verification & Reasoning Audit**: A "Meticulous Fact-Checker" validates claims and reasoning.
+6. **📋 Synthesis Planning**: A "Synthesis Architect" outlines the structure for the final answer.
+7. **✍️ Editorial Guidelines**: An "Editorial Director" defines the voice, tone, and formatting.
+8. **🏆 Final Synthesis**: The Chairman produces the final response, integrating all insights.
 
 ## 🔁 Continuing a Thread
 
@@ -114,7 +116,7 @@ Council/
 │   └── openrouter.py    # API client
 ├── frontend/
 │   ├── src/
-│   │   ├── components/  # Stage components + ModelSelector
+│   │   ├── components/  # Stage components + ModelSelector + Intent Clarification UI
 │   │   ├── App.jsx      # Main state & SSE handling
 │   │   └── index.css    # Global design system
 │   └── package.json

@@ -3,7 +3,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from typing import List, Dict, Any, Optional, Tuple
 import uuid
 import json
@@ -12,7 +12,8 @@ import asyncio
 from . import storage
 from .council import (
     generate_conversation_title,
-    stage0_analyze_intent,
+    stage0_generate_intent_draft,
+    stage0_finalize_intent,
     stage_brainstorm_experts,
     get_expert_contribution,
     stage_verification,
@@ -47,6 +48,26 @@ class SendMessageRequest(BaseModel):
     model_selection: Optional[ModelSelection] = None
 
 
+class ClarificationAnswer(BaseModel):
+    question_id: str
+    selected_option: Optional[str] = None
+    selected_options: Optional[List[str]] = None
+    other_text: Optional[str] = None
+
+    def normalized_options(self) -> List[str]:
+        if self.selected_options:
+            return self.selected_options
+        if self.selected_option:
+            return [self.selected_option]
+        return []
+
+
+class ContinueMessageRequest(BaseModel):
+    answers: List[ClarificationAnswer] = []
+    free_text: Optional[str] = None
+    skip: bool = False
+
+
 class ConversationMetadata(BaseModel):
     id: str
     created_at: str
@@ -61,9 +82,15 @@ class Conversation(BaseModel):
     messages: List[Dict[str, Any]]
 
 
-def normalize_model_selection(selection: Optional[ModelSelection]) -> Tuple[str, List[str]]:
+def normalize_model_selection(selection: Optional[Any]) -> Tuple[str, List[str]]:
     if selection is None:
         return CHAIRMAN_MODEL, COUNCIL_MODELS
+
+    if isinstance(selection, dict):
+        try:
+            selection = ModelSelection(**selection)
+        except ValidationError:
+            raise HTTPException(status_code=400, detail="Invalid model selection payload")
 
     available = set(AVAILABLE_MODELS)
 
@@ -140,14 +167,13 @@ async def delete_conversation(conversation_id: str):
 
 @app.post("/api/conversations/{conversation_id}/message/stream")
 async def send_message_stream(conversation_id: str, request: SendMessageRequest):
-    """Send a message and stream the sequential expert collaboration process."""
+    """Send a message and stream the intent draft + clarification questions."""
     conversation = storage.get_conversation(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     is_first_message = len(conversation["messages"]) == 0
     chairman_model, expert_models = normalize_model_selection(request.model_selection)
-    num_experts = len(expert_models)
     model_selection = {
         "chairman_model": chairman_model,
         "expert_models": expert_models,
@@ -164,15 +190,98 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
             # Define history for context-aware functions (excludes current message which is added in storage but not in 'conversation' variable yet)
             history = conversation.get("messages", [])
 
-            # Stage 0: Analyze intent
+            # Phase 1: Draft intent + clarification questions
+            yield f"data: {json.dumps({'type': 'intent_draft_start'})}\n\n"
+            intent_draft = await stage0_generate_intent_draft(
+                request.content,
+                history,
+                analysis_model=chairman_model,
+            )
+            storage.add_assistant_message_intent_draft(
+                conversation_id,
+                intent_draft,
+                intent_draft.get("display", {}),
+                intent_draft.get("questions", []),
+                {"model_selection": model_selection},
+            )
+            yield f"data: {json.dumps({'type': 'intent_draft_complete', 'data': intent_draft})}\n\n"
+            yield f"data: {json.dumps({'type': 'clarification_required'})}\n\n"
+
+            if title_task:
+                title = await title_task
+                storage.update_conversation_title(conversation_id, title)
+                yield f"data: {json.dumps({'type': 'title_complete', 'data': {'title': title}})}\n\n"
+
+            yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+    )
+
+
+@app.post("/api/conversations/{conversation_id}/message/continue")
+async def continue_message_stream(conversation_id: str, request: ContinueMessageRequest):
+    """Continue a message after intent clarifications (or skip)."""
+    conversation = storage.get_conversation(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    pending = storage.find_pending_intent_message(conversation_id)
+    if pending is None:
+        raise HTTPException(status_code=400, detail="No pending intent clarification found")
+
+    pending_index, pending_message = pending
+    if pending_index == 0:
+        raise HTTPException(status_code=400, detail="Pending intent has no user context")
+
+    user_message = conversation["messages"][pending_index - 1]
+    user_query = user_message.get("content", "")
+    history = conversation["messages"][:pending_index - 1]
+
+    model_selection_payload = (pending_message.get("metadata") or {}).get("model_selection")
+    chairman_model, expert_models = normalize_model_selection(model_selection_payload)
+    num_experts = len(expert_models)
+
+    clarification_payload = {
+        "answers": [
+            {
+                "question_id": answer.question_id,
+                "selected_options": answer.normalized_options(),
+                "other_text": answer.other_text or "",
+            }
+            for answer in request.answers
+        ],
+        "free_text": request.free_text or "",
+        "skip": request.skip,
+    }
+
+    async def event_generator():
+        try:
+            storage.mark_pending_intent_submitted(
+                conversation_id,
+                clarification_payload,
+            )
+
+            # Phase 3: Final intent analysis
             yield f"data: {json.dumps({'type': 'stage0_start'})}\n\n"
-            intent_analysis = await stage0_analyze_intent(request.content, history)
+            intent_analysis = await stage0_finalize_intent(
+                user_query,
+                pending_message.get("intent_draft", {}),
+                clarification_payload,
+                history,
+                analysis_model=chairman_model,
+            )
             yield f"data: {json.dumps({'type': 'stage0_complete', 'data': {'analysis': intent_analysis}})}\n\n"
 
             # Stage 0.5: Brainstorm experts
             yield f"data: {json.dumps({'type': 'brainstorm_start'})}\n\n"
             brainstorm_content, experts = await stage_brainstorm_experts(
-                request.content,
+                user_query,
                 intent_analysis,
                 history,
                 expert_models=expert_models,
@@ -183,45 +292,45 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
 
             # Stage 1: Sequential Expert Contributions
             yield f"data: {json.dumps({'type': 'contributions_start'})}\n\n"
-            
+
             contributions = []
             for i, expert in enumerate(experts):
-                order = expert.get('order', i + 1)
-                
+                order = expert.get("order", i + 1)
+
                 yield f"data: {json.dumps({'type': 'expert_start', 'data': {'order': order, 'expert': expert}})}\n\n"
-                
+
                 contribution = await get_expert_contribution(
-                    request.content, 
-                    expert, 
-                    contributions, 
+                    user_query,
+                    expert,
+                    contributions,
                     order,
                     intent_analysis,
                     history,
                     expert_models=expert_models,
                     num_experts=num_experts,
                 )
-                
+
                 entry = {
                     "order": order,
                     "expert": expert,
                     "contribution": contribution,
-                    "model": expert_models[(order - 1) % len(expert_models)]
+                    "model": expert_models[(order - 1) % len(expert_models)],
                 }
                 contributions.append(entry)
-                
+
                 yield f"data: {json.dumps({'type': 'expert_complete', 'data': entry})}\n\n"
 
             yield f"data: {json.dumps({'type': 'contributions_complete', 'data': {'num_experts': len(contributions)}})}\n\n"
 
             # Stage 2.5: Verification
             yield f"data: {json.dumps({'type': 'verification_start'})}\n\n"
-            verification_data = await stage_verification(request.content, contributions, history)
+            verification_data = await stage_verification(user_query, contributions, history)
             yield f"data: {json.dumps({'type': 'verification_complete', 'data': verification_data})}\n\n"
 
             # Stage 2.75: Synthesis Planning
             yield f"data: {json.dumps({'type': 'planning_start'})}\n\n"
             synthesis_plan = await stage_synthesis_planning(
-                request.content,
+                user_query,
                 contributions,
                 intent_analysis,
                 verification_data,
@@ -232,7 +341,7 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
             # Stage 2.9: Editorial Guidelines
             yield f"data: {json.dumps({'type': 'editorial_start'})}\n\n"
             editorial_guidelines = await stage_editorial_guidelines(
-                request.content,
+                user_query,
                 intent_analysis,
                 contributions,
                 synthesis_plan,
@@ -243,7 +352,7 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
             # Stage 3: Final Synthesis
             yield f"data: {json.dumps({'type': 'stage3_start'})}\n\n"
             stage3_result = await stage3_synthesize_final(
-                request.content,
+                user_query,
                 contributions,
                 intent_analysis=intent_analysis,
                 verification_data=verification_data,
@@ -254,25 +363,26 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
             )
             yield f"data: {json.dumps({'type': 'stage3_complete', 'data': stage3_result})}\n\n"
 
-            if title_task:
-                title = await title_task
-                storage.update_conversation_title(conversation_id, title)
-                yield f"data: {json.dumps({'type': 'title_complete', 'data': {'title': title}})}\n\n"
-
             metadata = {
                 "intent_analysis": intent_analysis,
                 "verification_data": verification_data,
                 "synthesis_plan": synthesis_plan,
                 "editorial_guidelines": editorial_guidelines,
                 "num_experts": len(contributions),
-                "model_selection": model_selection,
+                "model_selection": {
+                    "chairman_model": chairman_model,
+                    "expert_models": expert_models,
+                },
+                "clarification_answers": clarification_payload,
             }
-            storage.add_assistant_message_debate(
+
+            storage.finalize_intent_message(
                 conversation_id,
+                intent_analysis,
                 experts,
                 contributions,
                 stage3_result,
-                metadata
+                metadata,
             )
 
             yield f"data: {json.dumps({'type': 'complete'})}\n\n"
