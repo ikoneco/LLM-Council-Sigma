@@ -53,7 +53,7 @@ export default function ModelSelector({
       <div className="model-selector-header">
         <span className="model-selector-title">Model Selection</span>
         <span className={`model-selector-count ${isValid ? 'ok' : 'error'}`}>
-          {selectedCount}/{minExpertModels}+ experts
+          {selectedCount} selected
         </span>
       </div>
 
@@ -78,7 +78,7 @@ export default function ModelSelector({
 
         <div className="model-selector-section">
           <div className="model-selector-label">
-            Expert models (select at least {minExpertModels})
+            Expert models (select any number)
           </div>
           <div className="model-options">
             {availableModels.map((model) => {
@@ -99,9 +99,9 @@ export default function ModelSelector({
               );
             })}
           </div>
-          {!isValid && (
+          {!isValid && minExpertModels > 0 && (
             <div className="model-selector-hint">
-              Select at least {minExpertModels} expert models to proceed.
+              Select at least {minExpertModels} expert {minExpertModels === 1 ? 'model' : 'models'} to proceed.
             </div>
           )}
         </div>

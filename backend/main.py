@@ -21,7 +21,7 @@ from .council import (
     stage_editorial_guidelines,
     stage3_synthesize_final,
 )
-from .config import AVAILABLE_MODELS, COUNCIL_MODELS, CHAIRMAN_MODEL, MIN_EXPERT_MODELS
+from .config import AVAILABLE_MODELS, COUNCIL_MODELS, CHAIRMAN_MODEL, MIN_EXPERT_MODELS, DEFAULT_NUM_EXPERTS
 
 app = FastAPI(title="LLM Council API")
 
@@ -245,7 +245,7 @@ async def continue_message_stream(conversation_id: str, request: ContinueMessage
 
     model_selection_payload = (pending_message.get("metadata") or {}).get("model_selection")
     chairman_model, expert_models = normalize_model_selection(model_selection_payload)
-    num_experts = len(expert_models)
+    num_experts = DEFAULT_NUM_EXPERTS
 
     clarification_payload = {
         "answers": [

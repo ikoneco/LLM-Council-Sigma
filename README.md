@@ -5,7 +5,7 @@
 ## ✨ Key Features
 
 - **Multi-Stage Orchestration**: Moves beyond simple prompting to a state-managed workflow.
-- **Model Selection**: Users choose the Chairman model and a pool of expert models (minimum 6 of 8).
+- **Model Selection**: Users choose the Chairman model and any number of expert models (models are reused to staff 6 experts if fewer are selected).
 - **Dynamic Expert Selection**: Automatically identifies the specialized roles needed (e.g., "Senior Product Strategist", "Security Architect") based on the query.
 - **Intent Clarification Loop**: Draft intent understanding + 3–6 high-impact questions (skippable) before the pipeline runs.
 - **Sequential Collaboration**: Experts build upon each other's work, providing deep, layered insights.
@@ -19,7 +19,7 @@
 
 ## 🔄 The Council Workflow
 
-0. **Model Selection**: Choose the Chairman model and a pool of expert models (minimum 6).
+0. **Model Selection**: Choose the Chairman model and any number of expert models; the system always staffs 6 experts and reuses models if needed.
 1. **🎯 Intent Draft + Clarifications**: The system summarizes its understanding and asks 3–6 high-impact questions (or you can skip).
 2. **✅ Brainstorm Intent Brief**: A concise brief (no assumptions) guides expert brainstorming.
 3. **🧠 Expert Brainstorm**: Multiple models propose the ideal team of experts.

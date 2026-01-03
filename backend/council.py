@@ -5,9 +5,7 @@ import json
 import re
 import asyncio
 from .openrouter import query_model
-from .config import COUNCIL_MODELS, CHAIRMAN_MODEL, MIN_EXPERT_MODELS
-
-DEFAULT_NUM_EXPERTS = MIN_EXPERT_MODELS
+from .config import COUNCIL_MODELS, CHAIRMAN_MODEL, MIN_EXPERT_MODELS, DEFAULT_NUM_EXPERTS
 
 SUPPORTED_OUTPUT_TYPES = [
     "plan",
@@ -1297,7 +1295,7 @@ async def run_full_council(
     )
     
     models = expert_models or COUNCIL_MODELS
-    expert_count = num_experts or (len(models) if expert_models else DEFAULT_NUM_EXPERTS)
+    expert_count = num_experts or DEFAULT_NUM_EXPERTS
 
     # Stage 0.5: Brainstorm and form expert team
     brainstorm_content, experts = await stage_brainstorm_experts(

@@ -64,7 +64,7 @@ All orchestration logic resides in `backend/council.py`.
 ### 0. Model Selection (UI + API)
 
 - **Input**: User-selected chairman model + expert model pool
-- **Rules**: At least 6 expert models must be selected
+- **Rules**: At least 1 expert model must be selected; models can be reused across experts
 - **Output**: Model selection metadata stored with the message
 
 ### 1. Intent Draft + Clarification (`stage0_generate_intent_draft`)
@@ -83,7 +83,7 @@ All orchestration logic resides in `backend/council.py`.
 
 - **Process**: All selected expert models generate expert suggestions in parallel.
 - **Synthesis**: Chairman model synthesizes the final expert team.
-- **Output**: List of experts with specific Roles, Tasks (50+ words), and Measurable Objectives.
+- **Output**: A fixed team of 6 experts with specific Roles, Tasks (50+ words), and Measurable Objectives.
 
 ### 4. Sequential Contributions (`stage1_sequential_contributions`)
 
@@ -140,8 +140,9 @@ The model responsible for synthesis tasks (Planning, Team Selection, Final Outpu
 
 ### Experts
 
-- **Count**: Dynamic based on selected expert models
-- **Minimum**: `MIN_EXPERT_MODELS = 6` (in `backend/config.py`)
+- **Count**: Fixed at 6 per cycle
+- **Minimum**: `MIN_EXPERT_MODELS = 1` (in `backend/config.py`)
+- **Model usage**: Selected models are reused round-robin when fewer than 6 are chosen
 
 ---
 

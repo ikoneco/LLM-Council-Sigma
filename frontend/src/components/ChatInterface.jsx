@@ -36,9 +36,9 @@ export default function ChatInterface({
   ];
 
   const availableModels = modelCatalog?.available_models || fallbackAvailableModels;
-  const minExpertModels = modelCatalog?.min_expert_models || 6;
+  const minExpertModels = modelCatalog?.min_expert_models || 1;
   const defaultChairman = modelCatalog?.default_chairman_model || 'minimax/minimax-m2.1';
-  const defaultExperts = modelCatalog?.default_expert_models || fallbackAvailableModels.slice(0, 6);
+  const defaultExperts = modelCatalog?.default_expert_models || fallbackAvailableModels;
 
   useEffect(() => {
     if (!conversation) return;

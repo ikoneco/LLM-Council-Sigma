@@ -33,7 +33,8 @@ AVAILABLE_MODELS = [
 ]
 
 # Selection rules
-MIN_EXPERT_MODELS = 6
+MIN_EXPERT_MODELS = 1
+DEFAULT_NUM_EXPERTS = 6
 
 # Chairman model - synthesizes final response
 CHAIRMAN_MODEL = "minimax/minimax-m2.1"

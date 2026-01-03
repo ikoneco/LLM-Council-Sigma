@@ -21,7 +21,7 @@ Retrieve the available models and default selections.
     "available_models": ["model-a", "model-b"],
     "default_expert_models": ["model-a", "model-b"],
     "default_chairman_model": "model-a",
-    "min_expert_models": 6
+    "min_expert_models": 1
   }
   ```
 
@@ -132,7 +132,7 @@ Send a user query and receive the intent draft + clarification questions.
 
   Notes:
   - `model_selection` is optional; defaults apply if omitted.
-  - `expert_models` must include at least 6 valid models.
+  - `expert_models` must include at least 1 valid model.
   - The initial stream ends after `clarification_required`; use the continue endpoint to run the full pipeline.
 
 - **Response**: `text/event-stream`
@@ -169,6 +169,7 @@ Continue a message after clarifications (or skip) and run the full pipeline.
   Notes:
   - `skip: true` bypasses clarifications and proceeds with best-effort intent analysis.
   - `selected_options` supports multi-select responses per question.
+  - The pipeline always executes 6 experts; if fewer models are selected, models are reused round-robin.
 
 - **Response**: `text/event-stream`
 
