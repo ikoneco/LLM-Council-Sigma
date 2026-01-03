@@ -103,6 +103,7 @@ Retrieve the full message history and metadata for a specific conversation.
   Notes:
   - `status` values include `clarification_pending`, `clarification_submitted`, and `complete`.
   - `intent_draft` / `intent_display` / `clarification_questions` appear before the pipeline runs.
+  - `stage0.analysis` contains the intent brief used to guide brainstorming.
 
 ### 5. Send Message (Stream)
 
@@ -172,7 +173,7 @@ Continue a message after clarifications (or skip) and run the full pipeline.
 - **Response**: `text/event-stream`
 
   **Event Types**:
-  - `stage0_start` / `stage0_complete`: Final intent analysis (post-clarification)
+  - `stage0_start` / `stage0_complete`: Brainstorm intent brief (post-clarification)
   - `brainstorm_start` / `brainstorm_complete`: Expert brainstorming & selection (Contains `brainstorm_content` and `experts` list)
   - `contributions_start`: Sequence begins
   - `expert_start` / `expert_complete`: Individual expert contributions (Contains `expert` details and `contribution` text)

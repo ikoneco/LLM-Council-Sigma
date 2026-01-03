@@ -21,7 +21,7 @@
 
 0. **Model Selection**: Choose the Chairman model and a pool of expert models (minimum 6).
 1. **🎯 Intent Draft + Clarifications**: The system summarizes its understanding and asks 3–6 high-impact questions (or you can skip).
-2. **✅ Final Intent Analysis**: A locked intent packet is produced for the pipeline.
+2. **✅ Brainstorm Intent Brief**: A concise brief (no assumptions) guides expert brainstorming.
 3. **🧠 Expert Brainstorm**: Multiple models propose the ideal team of experts.
 4. **👥 Sequential Contributions**: Selected experts (simulated by LLMs) contribute linearly, reviewing and building on prior work.
 5. **🔬 Verification & Reasoning Audit**: A "Meticulous Fact-Checker" validates claims and reasoning.

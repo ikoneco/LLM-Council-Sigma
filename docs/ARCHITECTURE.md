@@ -31,7 +31,7 @@ graph TD
     
     subgraph "Backend Orchestration (council.py)"
         MS[Model Selection] --> ID[Intent Draft + Clarification]
-        ID --> S0[Stage 0: Final Intent Analysis]
+        ID --> S0[Stage 0: Brainstorm Intent Brief]
         S0 --> B0[Stage 0.5: Brainstorm]
         B0 --> S1[Stage 1: Expert Contributions]
         S1 --> V1[Stage 2.5: Verification]
@@ -73,11 +73,11 @@ All orchestration logic resides in `backend/council.py`.
 - **Goal**: Produce a draft intent model and 3–6 clarification questions.
 - **Output**: `intent_draft`, `intent_display`, and `clarification_questions` for the UI.
 
-### 2. Final Intent Analysis (`stage0_finalize_intent`)
+### 2. Brainstorm Intent Brief (`stage0_finalize_intent`)
 
 - **Input**: User query + draft intent + clarification answers (or skip).
-- **Goal**: Lock a final intent packet used by the rest of the pipeline.
-- **Output**: Markdown intent analysis + structured JSON packet.
+- **Goal**: Produce a concise, assumption-free brief that guides expert brainstorming.
+- **Output**: Markdown intent brief (no JSON) with goals, constraints, deliverable expectations, and execution guidance.
 
 ### 3. Expert Brainstorm (`stage_brainstorm_experts`)
 
