@@ -75,10 +75,6 @@ export default function ChatInterface({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [conversation]);
-
   const handleSubmit = (e) => {
     e.preventDefault();
     if (input.trim() && !isLoading && isSelectionValid) {
