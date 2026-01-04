@@ -98,16 +98,19 @@ All orchestration logic resides in `backend/council.py`.
 ### 5. Verification (`stage_verification`)
 
 - **Process**: Meticulous fact-checker + reasoning auditor reviews critical claims and logic across contributions.
+- **Model**: Runs on the user-selected Chairman model; web search (if triggered) uses `openai/gpt-4o-mini-search-preview`.
 - **Output**: Factual corrections plus reasoning issues (gaps, inconsistencies, logical flaws, assumptions).
 
 ### 6. Synthesis Planning (`stage_synthesis_planning`)
 
 - **Process**: "Synthesis Architect" defines a roadmap for the final output.
+- **Model**: Runs on the user-selected Chairman model for consistency.
 - **Output**: Missing elements, reasoning gaps, recommended structure, checklist.
 
 ### 7. Editorial Guidelines (`stage_editorial_guidelines`)
 
 - **Process**: "Editorial Director" defines the voice, tone, and style.
+- **Model**: Runs on the user-selected Chairman model for consistency.
 - **Output**: Guidelines for audience calibration, formatting, and "anti-patterns".
 
 ### 8. Final Synthesis (`stage3_synthesize_final`)

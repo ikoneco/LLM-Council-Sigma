@@ -114,6 +114,24 @@ def _extract_json(text: str) -> Optional[Dict[str, Any]]:
             return None
 
 
+def _extract_json_array(text: str) -> Optional[List[Any]]:
+    if not text:
+        return None
+    match = re.search(r"\[[\s\S]*?\]", text)
+    if not match:
+        return None
+    payload = match.group()
+    try:
+        return json.loads(payload)
+    except json.JSONDecodeError:
+        cleaned = re.sub(r",\s*\]", "]", payload)
+        cleaned = re.sub(r",\s*\}", "}", cleaned)
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            return None
+
+
 def _extract_citations(annotations: Any) -> List[Dict[str, str]]:
     citations = []
     if not isinstance(annotations, list):
@@ -966,15 +984,19 @@ async def stage_verification(
     context_section = f"\n<conversation_context>\n{context_str}\n</conversation_context>" if context_str else ""
     
     summary = "\n".join([
-        f"- Expert {entry['order']} ({entry['expert']['name']}): \"{entry['contribution']}...\""
+        f"- Expert {entry['order']} ({entry['expert']['name']}): \"{entry['contribution']}\""
         for entry in contributions
     ])
-    
-    # 1. Generate Search Targets
-    query_gen_prompt = f"""<task>
-You are a Fact-Check Strategist dedicated to eliminating hallucinations and weak reasoning.
-Review the expert contributions and flag specific data points that are prone to hallucination (e.g., pricing, release dates, version numbers, technical specs).
-Generate EXACTLY {SEARCH_QUERY_COUNT} high-risk verification targets with precise search queries.
+
+    search_status_notes = []
+    search_scope = ""
+    preferred_sources_global: List[str] = []
+
+    # 1. Build an exhaustive verification scope (used ONLY for search targeting)
+    scope_prompt = f"""<task>
+You are a Verification Scope Synthesizer. Build an exhaustive, lossless audit map for web validation.
+Extract EVERY factual claim, number, date, price, version, benchmark, proper noun, regulation, external dependency, and risky assumption that could be wrong or outdated.
+Include implicit assumptions and uncertainties that should be checked. Do NOT omit anything; if unsure, include it.
 </task>
 
 <user_query>{user_query}</user_query>
@@ -983,6 +1005,73 @@ Generate EXACTLY {SEARCH_QUERY_COUNT} high-risk verification targets with precis
 <expert_contributions>
 {summary}
 </expert_contributions>
+
+<output_format>
+Return JSON:
+{{
+  "claims_to_verify": ["..."],
+  "areas_of_concern": ["..."],
+  "assumptions_to_check": ["..."],
+  "entities_and_sources": ["..."],
+  "critical_metrics": ["..."],
+  "preferred_sources": ["official docs", "vendor sites", "standards bodies", "peer-reviewed research", "government data"]
+}}
+</output_format>"""
+
+    try:
+        model = analysis_model or CHAIRMAN_MODEL
+        scope_response = await query_model(
+            model,
+            [{"role": "user", "content": scope_prompt}],
+            extra_body=build_reasoning_payload(model, thinking_by_model),
+        )
+        scope_payload = _extract_json(scope_response.get("content", "")) if scope_response else None
+        if scope_payload:
+            preferred_sources = scope_payload.get("preferred_sources")
+            if isinstance(preferred_sources, list):
+                preferred_sources_global = [item for item in preferred_sources if isinstance(item, str) and item.strip()]
+
+            scope_sections = []
+            for label, key in [
+                ("Claims to verify", "claims_to_verify"),
+                ("Areas of concern", "areas_of_concern"),
+                ("Assumptions to check", "assumptions_to_check"),
+                ("Entities and sources", "entities_and_sources"),
+                ("Critical metrics", "critical_metrics"),
+            ]:
+                items = scope_payload.get(key)
+                if isinstance(items, list) and items:
+                    scope_sections.append(
+                        f"{label}:\n" + "\n".join(f"- {item}" for item in items if isinstance(item, str) and item.strip())
+                    )
+            if scope_sections:
+                search_scope = "\n\n".join(scope_sections)
+        if not search_scope:
+            search_status_notes.append("Search scope generation returned no usable coverage; proceeding without web evidence.")
+    except Exception as e:
+        print(f"Search scope generation failed: {e}")
+        search_status_notes.append("Search scope generation failed; proceeding without web evidence.")
+
+    # 2. Generate Search Targets from the scope
+    search_targets = []
+    if search_scope:
+        sources_hint_global = ""
+        if preferred_sources_global:
+            sources_hint_global = f"Preferred sources: {', '.join(preferred_sources_global)}"
+
+        query_gen_prompt = f"""<task>
+You are a Fact-Check Strategist dedicated to eliminating hallucinations and weak reasoning.
+Use the Verification Scope to select EXACTLY {SEARCH_QUERY_COUNT} high-risk verification targets.
+Targets must collectively cover the MOST critical and failure-prone items without missing key risk areas.
+Prefer high-quality, authoritative sources. {sources_hint_global}
+</task>
+
+<user_query>{user_query}</user_query>
+{context_section}
+
+<verification_scope>
+{search_scope}
+</verification_scope>
 
 <output_format>
 Return ONLY a JSON array of objects:
@@ -996,25 +1085,26 @@ Return ONLY a JSON array of objects:
 ]
 </output_format>"""
 
-    search_targets = []
-    try:
-        messages = [{"role": "user", "content": query_gen_prompt}]
-        model = analysis_model or CHAIRMAN_MODEL
-        response = await query_model(
-            model,
-            messages,
-            extra_body=build_reasoning_payload(model, thinking_by_model),
-        )
-        content = response.get('content', '[]') if response else "[]"
-        import json
-        import re
-        json_match = re.search(r'\[.*\]', content, re.DOTALL)
-        if json_match:
-            search_targets = json.loads(json_match.group())
-    except Exception as e:
-        print(f"Error generating search targets: {e}")
+        try:
+            messages = [{"role": "user", "content": query_gen_prompt}]
+            model = analysis_model or CHAIRMAN_MODEL
+            response = await query_model(
+                model,
+                messages,
+                extra_body=build_reasoning_payload(model, thinking_by_model),
+            )
+            content = response.get('content', '[]') if response else "[]"
+            parsed_targets = _extract_json_array(content) or []
+            search_targets = [target for target in parsed_targets if isinstance(target, dict)]
+            if not search_targets:
+                search_status_notes.append("Search target generation returned no valid targets; proceeding without web evidence.")
+        except Exception as e:
+            print(f"Error generating search targets: {e}")
+            search_status_notes.append("Search target generation failed; proceeding without web evidence.")
+    elif not search_status_notes:
+        search_status_notes.append("Search scope unavailable; proceeding without web evidence.")
 
-    # 2. Execute Search via gpt-4o-mini-search-preview
+    # 3. Execute Search via gpt-4o-mini-search-preview
     search_evidence = ""
     if search_targets:
         try:
@@ -1027,6 +1117,8 @@ Return ONLY a JSON array of objects:
                 preferred_sources = target.get("preferred_sources", [])
                 if isinstance(preferred_sources, str):
                     preferred_sources = [preferred_sources]
+                if not preferred_sources and preferred_sources_global:
+                    preferred_sources = preferred_sources_global
 
                 sources_hint = ""
                 if preferred_sources:
@@ -1090,9 +1182,12 @@ Return JSON:
 
             if evidence_blocks:
                 search_evidence = "\n\n".join(evidence_blocks)
+            else:
+                search_status_notes.append("Search returned no evidence; verification relies on model knowledge.")
         except Exception as e:
             print(f"Search execution failed: {e}")
-            search_evidence = "Search unavailable."
+            search_status_notes.append("Search execution failed; proceeding without web evidence.")
+            search_evidence = ""
 
     # 3. Final Verification with Evidence
     evidence_section = ""
@@ -1159,7 +1254,11 @@ Provide your verification report now. Include both factual and reasoning issues:
         messages,
         extra_body=build_reasoning_payload(model, thinking_by_model),
     )
-    return response.get('content', 'Verification unavailable.') if response else "Verification unavailable."
+    verification_content = response.get('content', 'Verification unavailable.') if response else "Verification unavailable."
+    if search_status_notes:
+        status_block = "## Search Status\n" + "\n".join(f"- {note}" for note in search_status_notes)
+        verification_content = f"{status_block}\n\n{verification_content}"
+    return verification_content
 
 
 async def stage_synthesis_planning(
