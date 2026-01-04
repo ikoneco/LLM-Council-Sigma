@@ -40,6 +40,13 @@ AVAILABLE_MODELS = [
 MIN_EXPERT_MODELS = 1
 DEFAULT_NUM_EXPERTS = 6
 
+# Search / verification
+SEARCH_MODEL = "openai/gpt-4o-mini-search-preview"
+SEARCH_QUERY_COUNT = 3
+SEARCH_MAX_SOURCES = 3
+SEARCH_TIMEOUT = 45.0
+SEARCH_CONTEXT_SIZE = "high"
+
 # Chairman model - synthesizes final response
 CHAIRMAN_MODEL = "minimax/minimax-m2.1"
 

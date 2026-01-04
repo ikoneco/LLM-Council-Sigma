@@ -4,8 +4,14 @@ from typing import List, Dict, Any, Tuple, Optional
 import json
 import re
 import asyncio
-from .openrouter import query_model
-from .config import COUNCIL_MODELS, CHAIRMAN_MODEL, MIN_EXPERT_MODELS, DEFAULT_NUM_EXPERTS
+from .openrouter import query_model, query_search_model
+from .config import (
+    COUNCIL_MODELS,
+    CHAIRMAN_MODEL,
+    DEFAULT_NUM_EXPERTS,
+    SEARCH_QUERY_COUNT,
+    SEARCH_MAX_SOURCES,
+)
 
 SUPPORTED_OUTPUT_TYPES = [
     "plan",
@@ -898,11 +904,11 @@ async def stage_verification(
         for entry in contributions
     ])
     
-    # 1. Generate Search Queries
+    # 1. Generate Search Targets
     query_gen_prompt = f"""<task>
 You are a Fact-Check Strategist dedicated to eliminating hallucinations and weak reasoning.
 Review the expert contributions and flag specific data points that are prone to hallucination (e.g., pricing, release dates, version numbers, technical specs).
-Generate EXACTLY 3 targeted web search queries to rigorously verify these high-risk claims.
+Generate EXACTLY {SEARCH_QUERY_COUNT} high-risk verification targets with precise search queries.
 </task>
 
 <user_query>{user_query}</user_query>
@@ -913,11 +919,18 @@ Generate EXACTLY 3 targeted web search queries to rigorously verify these high-r
 </expert_contributions>
 
 <output_format>
-Return ONLY a JSON array of strings:
-["query 1", "query 2", "query 3"]
+Return ONLY a JSON array of objects:
+[
+  {{
+    "claim": "verbatim claim to verify",
+    "why_high_risk": "why this is likely to be wrong or outdated",
+    "query": "focused search query",
+    "preferred_sources": ["official docs", "vendor site", "standards body"]
+  }}
+]
 </output_format>"""
 
-    search_queries = []
+    search_targets = []
     try:
         messages = [{"role": "user", "content": query_gen_prompt}]
         response = await query_model("google/gemini-2.0-flash-001", messages)
@@ -926,41 +939,85 @@ Return ONLY a JSON array of strings:
         import re
         json_match = re.search(r'\[.*\]', content, re.DOTALL)
         if json_match:
-            search_queries = json.loads(json_match.group())
+            search_targets = json.loads(json_match.group())
     except Exception as e:
-        print(f"Error generating search queries: {e}")
+        print(f"Error generating search targets: {e}")
 
-    # 2. Execute Search (Non-blocking)
+    # 2. Execute Search via gpt-4o-mini-search-preview
     search_evidence = ""
-    if search_queries:
+    if search_targets:
         try:
-            def _run_search(queries):
-                from duckduckgo_search import DDGS
-                results = []
-                # Use DDGS context manager
-                with DDGS() as ddgs:
-                    for q in queries:
-                        try:
-                            # Fetch results (blocking IO)
-                            r = list(ddgs.text(q, max_results=3)) # Increased to 3
-                            if r:
-                                formatted_hits = []
-                                for hit in r:
-                                    title = hit.get('title', 'Unknown Source')
-                                    href = hit.get('href', '#')
-                                    body = hit.get('body', '')
-                                    formatted_hits.append(f"Source: {title}\nURL: {href}\nSnippet: {body}")
-                                
-                                results.append(f"Query: {q}\n" + "\n---\n".join(formatted_hits))
-                        except Exception:
-                            continue
-                return results
+            evidence_blocks = []
+            for target in search_targets[:SEARCH_QUERY_COUNT]:
+                if not isinstance(target, dict):
+                    continue
+                claim = target.get("claim", "").strip()
+                query = target.get("query", "").strip() or claim
+                preferred_sources = target.get("preferred_sources", [])
+                if isinstance(preferred_sources, str):
+                    preferred_sources = [preferred_sources]
 
-            # Run in thread pool to avoid blocking async loop
-            results = await asyncio.to_thread(_run_search, search_queries[:3])
-            
-            if results:
-                search_evidence = "\n\n".join(results)
+                sources_hint = ""
+                if preferred_sources:
+                    sources_hint = f"Preferred sources: {', '.join(preferred_sources)}"
+
+                search_prompt = f"""<task>
+Use web search to verify the claim. Return sources with URLs and a short evidence summary.
+</task>
+
+<claim>{claim}</claim>
+<query>{query}</query>
+{sources_hint}
+
+<output_format>
+Return JSON:
+{{
+  "claim": "{claim}",
+  "query": "{query}",
+  "verdict": "supports|refutes|unclear",
+  "summary": "1-2 sentence evidence summary",
+  "sources": [
+    {{"title": "Source Title", "url": "https://...", "snippet": "Relevant excerpt"}}
+  ]
+}}
+</output_format>"""
+
+                search_response = await query_search_model([{"role": "user", "content": search_prompt}])
+                raw_content = search_response.get("content", "") if search_response else ""
+                evidence = _extract_json(raw_content) or {}
+
+                verdict = evidence.get("verdict") or "unclear"
+                summary_text = evidence.get("summary") or evidence.get("analysis") or raw_content or "No evidence summary available."
+                sources = evidence.get("sources") or []
+
+                formatted_sources = []
+                if isinstance(sources, list):
+                    for source in sources[:SEARCH_MAX_SOURCES]:
+                        if not isinstance(source, dict):
+                            continue
+                        title = source.get("title", "Unknown Source")
+                        url = source.get("url", "")
+                        snippet = source.get("snippet", "")
+                        if url:
+                            formatted_sources.append(f"- [{title}]({url}) — {snippet}")
+                        else:
+                            formatted_sources.append(f"- {title} — {snippet}")
+
+                if not formatted_sources:
+                    formatted_sources.append("- No sources returned.")
+
+                block = "\n".join([
+                    f"Claim: {claim}",
+                    f"Query: {query}",
+                    f"Verdict: {verdict}",
+                    f"Summary: {summary_text}",
+                    "Sources:",
+                    *formatted_sources,
+                ])
+                evidence_blocks.append(block)
+
+            if evidence_blocks:
+                search_evidence = "\n\n".join(evidence_blocks)
         except Exception as e:
             print(f"Search execution failed: {e}")
             search_evidence = "Search unavailable."

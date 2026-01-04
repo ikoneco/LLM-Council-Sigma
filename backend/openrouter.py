@@ -2,13 +2,14 @@
 
 import httpx
 from typing import List, Dict, Any, Optional, Tuple
-from .config import OPENROUTER_API_KEY, OPENROUTER_API_URL
+from .config import OPENROUTER_API_KEY, OPENROUTER_API_URL, SEARCH_MODEL, SEARCH_TIMEOUT, SEARCH_CONTEXT_SIZE
 
 
 async def query_model(
     model: str,
     messages: List[Dict[str, str]],
-    timeout: float = 120.0
+    timeout: float = 120.0,
+    extra_body: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Query a single model via OpenRouter API.
@@ -30,6 +31,8 @@ async def query_model(
         "model": model,
         "messages": messages,
     }
+    if extra_body:
+        payload.update(extra_body)
 
     import asyncio
     max_retries = 3
@@ -75,6 +78,32 @@ async def query_model(
                 return None
     
     return None
+
+
+async def query_search_model(
+    messages: List[Dict[str, str]],
+    model: Optional[str] = None,
+    timeout: Optional[float] = None,
+    max_tokens: int = 800,
+) -> Optional[Dict[str, Any]]:
+    """
+    Query the search-enabled model with web search tooling.
+    """
+    search_model = model or SEARCH_MODEL
+    search_timeout = timeout or SEARCH_TIMEOUT
+    extra_body = {
+        "temperature": 0,
+        "max_tokens": max_tokens,
+        "tools": [{"type": "web_search"}],
+        "tool_choice": "auto",
+        "web_search_options": {"search_context_size": SEARCH_CONTEXT_SIZE},
+    }
+    return await query_model(
+        search_model,
+        messages,
+        timeout=search_timeout,
+        extra_body=extra_body,
+    )
 
 
 
