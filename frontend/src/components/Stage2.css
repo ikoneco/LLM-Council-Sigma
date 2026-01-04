@@ -5,7 +5,7 @@
 .stage2 h4 {
   margin: 20px 0 8px 0;
   color: #333;
-  font-size: 14px;
+  font-size: var(--text-body-sm);
   font-weight: 600;
 }
 
@@ -16,8 +16,8 @@
 .stage-description {
   margin: 0 0 12px 0;
   color: #666;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: var(--text-body-sm);
+  line-height: 1.6;
 }
 
 .aggregate-rankings {
@@ -31,7 +31,7 @@
 .aggregate-rankings h4 {
   margin: 0 0 12px 0;
   color: #2a7ae2;
-  font-size: 15px;
+  font-size: var(--text-body);
 }
 
 .aggregate-list {
@@ -53,7 +53,7 @@
 .rank-position {
   color: #2a7ae2;
   font-weight: 700;
-  font-size: 16px;
+  font-size: 0.95rem;
   min-width: 35px;
 }
 
@@ -120,8 +120,8 @@
 
 .ranking-content {
   color: #333;
-  line-height: 1.6;
-  font-size: 14px;
+  line-height: 1.65;
+  font-size: var(--text-body-sm);
 }
 
 .parsed-ranking {
@@ -132,7 +132,7 @@
 
 .parsed-ranking strong {
   color: #2a7ae2;
-  font-size: 13px;
+  font-size: 0.85rem;
 }
 
 .parsed-ranking ol {
@@ -149,5 +149,5 @@
 
 .rank-count {
   color: #999;
-  font-size: 12px;
+  font-size: 0.75rem;
 }

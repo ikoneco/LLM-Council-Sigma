@@ -57,24 +57,44 @@ def format_conversation_history(history: List[Dict[str, Any]]) -> str:
     """Format previous conversation history for context handling."""
     if not history:
         return ""
-    
-    formatted = []
+
+    user_entries = []
+    chairman_outputs = []
+
     for msg in history:
         role = msg.get("role")
         if role == "user":
-            formatted.append(f"### 👤 User:\n{msg.get('content', '')}")
+            content = msg.get("content", "")
+            if content:
+                user_entries.append(content)
         elif role == "assistant":
-            # Extract stage3 response if available, otherwise generic content
             response = ""
             if "stage3" in msg and msg["stage3"]:
                 response = msg["stage3"].get("response", "")
             elif "content" in msg:
                 response = msg["content"]
-            
             if response:
-                formatted.append(f"### 🤖 Chairman (Previous Output - Baseline Context):\n{response}")
-                
-    return "\n".join(formatted)
+                chairman_outputs.append(response)
+
+    formatted = []
+    if chairman_outputs:
+        formatted.append(
+            "### 🤖 Chairman (Most Recent Output - Baseline Context):\n"
+            + chairman_outputs[-1]
+        )
+        if len(chairman_outputs) > 1:
+            prior = "\n\n---\n\n".join(chairman_outputs[:-1])
+            formatted.append(
+                "### 📜 Earlier Chairman Outputs (for continuity):\n"
+                + prior
+            )
+
+    if user_entries:
+        formatted.append(
+            "### 👤 Prior User Requests:\n" + "\n\n".join(user_entries)
+        )
+
+    return "\n\n".join(formatted)
 
 def _extract_json(text: str) -> Optional[Dict[str, Any]]:
     if not text:

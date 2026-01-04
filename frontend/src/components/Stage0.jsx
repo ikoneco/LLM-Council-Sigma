@@ -1,3 +1,4 @@
+import { Children, isValidElement } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Target, Compass, Lightbulb, CheckCircle2 } from 'lucide-react';
@@ -10,9 +11,23 @@ export default function Stage0({ data, experts }) {
 
     if (!analysis) return null;
 
+    const flattenText = (node) => {
+        const parts = [];
+        Children.forEach(node, (child) => {
+            if (typeof child === 'string' || typeof child === 'number') {
+                parts.push(String(child));
+            } else if (isValidElement(child)) {
+                parts.push(flattenText(child.props.children));
+            }
+        });
+        return parts.join('');
+    };
+
     const renderHeader = ({ children, level }) => {
-        const text = String(children);
-        const cleanText = text.replace(/^[\p{Emoji}\u2000-\u3300\uF000-\uFFFF]+\s*/u, '').trim();
+        const cleanText = flattenText(children)
+            .replace(/^\s*[\p{Emoji}\u2000-\u3300\uF000-\uFFFF]+\s*/u, '')
+            .replace(/^\s*#{1,6}\s*/, '')
+            .trim();
 
         let Icon = Target;
         if (cleanText.includes('Core Intent')) Icon = Target;
@@ -22,10 +37,10 @@ export default function Stage0({ data, experts }) {
         else if (cleanText.includes('Final Intent Summary')) Icon = Target;
         else if (cleanText.includes('Intent Packet')) Icon = Compass;
 
-        const Tag = level === 2 ? 'h2' : 'h3';
+        const Tag = level === 1 ? 'h1' : level === 2 ? 'h2' : 'h3';
 
         return (
-            <Tag className="markdown-header-with-icon" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '16px', marginBottom: '8px' }}>
+            <Tag className="markdown-header-with-icon" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px', marginBottom: '6px' }}>
                 <Icon size={18} style={{ color: 'var(--color-primary)' }} />
                 {cleanText}
             </Tag>
@@ -33,6 +48,9 @@ export default function Stage0({ data, experts }) {
     };
 
     const markdownComponents = {
+        h1(props) {
+            return renderHeader({ ...props, level: 1 });
+        },
         h2(props) {
             return renderHeader({ ...props, level: 2 });
         },

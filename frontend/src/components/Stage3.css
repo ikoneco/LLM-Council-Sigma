@@ -24,15 +24,15 @@
 
 .chairman-label {
   color: var(--color-primary);
-  font-size: 0.75rem;
+  font-size: var(--text-caption);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: var(--tracking-wide);
   margin-bottom: 24px;
 }
 
 .final-text {
-  font-size: 1.05rem;
-  line-height: 1.7;
+  font-size: var(--text-body-lg);
+  line-height: 1.75;
   color: var(--color-text-main);
 }

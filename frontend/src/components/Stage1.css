@@ -13,9 +13,12 @@
 
 .stage-title {
   margin: 0 0 20px 0;
-  color: #1e293b;
-  font-size: 1.1rem;
+  color: var(--color-text-muted);
+  font-size: var(--text-caption);
   font-weight: 600;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
   display: flex;
   align-items: center;
   gap: 8px;

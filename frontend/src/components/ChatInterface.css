@@ -77,9 +77,9 @@
   background: #FFFFFF;
   border: 1px solid var(--color-border);
   border-radius: 12px;
-  padding: 40px;
+  padding: 32px;
   box-shadow: var(--shadow-sm);
-  margin: 32px 0;
+  margin: 24px 0;
   position: relative;
 }
 
@@ -143,7 +143,7 @@
   text-transform: uppercase;
   letter-spacing: var(--tracking-wide);
   color: var(--color-text-muted);
-  margin-bottom: 32px;
+  margin-bottom: 24px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -356,10 +356,10 @@
   font-family: var(--font-display);
   font-weight: 600;
   color: var(--color-text-main);
-  margin-top: 1.5em;
-  margin-bottom: 0.75em;
-  font-size: var(--text-title-sm);
-  letter-spacing: var(--tracking-snug);
+  margin-top: 1.1em;
+  margin-bottom: 0.5em;
+  font-size: inherit;
+  letter-spacing: inherit;
 }
 
 .header-icon {

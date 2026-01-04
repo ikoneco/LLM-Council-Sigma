@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Children, isValidElement } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ClipboardList, PenTool, BrainCircuit, CheckCircle2, Target, Ruler, Mic, MessageCircle, AlertTriangle, Gem, Hash, Compass, Sparkles, Gavel, SlidersHorizontal } from 'lucide-react';
@@ -97,7 +97,32 @@ export default function ChatInterface({
     ? 'Add instructions to evolve the Chairman output...'
     : 'Ask a question...';
 
+  const flattenText = (node) => {
+    const parts = [];
+    Children.forEach(node, (child) => {
+      if (typeof child === 'string' || typeof child === 'number') {
+        parts.push(String(child));
+      } else if (isValidElement(child)) {
+        parts.push(flattenText(child.props.children));
+      }
+    });
+    return parts.join('');
+  };
+
+  const normalizeHeadingText = (children) => (
+    flattenText(children)
+      .replace(/^\s*[\p{Emoji}\u2000-\u3300\uF000-\uFFFF]+\s*/u, '')
+      .replace(/^\s*#{1,6}\s*/, '')
+      .trim()
+  );
+
   const markdownComponents = {
+    h1({ children }) {
+      return <h1>{normalizeHeadingText(children)}</h1>;
+    },
+    h2({ children }) {
+      return <h2>{normalizeHeadingText(children)}</h2>;
+    },
     code({ inline, className, children, ...props }) {
       return inline ? (
         <code className="inline-code" {...props}>{children}</code>
@@ -121,9 +146,8 @@ export default function ChatInterface({
       return <a href={href} target="_blank" rel="noopener noreferrer" className="styled-link">{children}</a>;
     },
     h3({ children }) {
-      const text = String(children);
-      // Strip leading emojis or symbols (non-alphanumeric start)
-      const cleanText = text.replace(/^[\p{Emoji}\u2000-\u3300\uF000-\uFFFF]+\s*/u, '').trim();
+      // Strip leading emojis or symbols and accidental markdown markers
+      const cleanText = normalizeHeadingText(children);
 
       let Icon = Sparkles;
       if (cleanText.includes('Audience')) Icon = Target;
@@ -145,6 +169,16 @@ export default function ChatInterface({
         </h3>
       );
     }
+  };
+
+  const normalizeBrainstormContent = (content) => {
+    if (!content) return '';
+    const text = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+    return text
+      .replace(/^##\s+Expert Brainstorm Results\s*/i, '')
+      .replace(/\n-{3,}\n/g, '\n\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   };
 
   const formatModelLabel = (model) => {
@@ -284,13 +318,13 @@ export default function ChatInterface({
                             <span>All models brainstorming expert team...</span>
                           </div>
                         ) : (
-                          <div className="brainstorm-report">
-                            <div className="report-content markdown-content">
-                              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                                {msg.brainstorm_content}
-                              </ReactMarkdown>
+                            <div className="brainstorm-report">
+                              <div className="report-content markdown-content">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                                {normalizeBrainstormContent(msg.brainstorm_content)}
+                                </ReactMarkdown>
+                              </div>
                             </div>
-                          </div>
                         )}
                       </div>
                     )}
