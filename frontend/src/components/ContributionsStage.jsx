@@ -4,6 +4,16 @@ import { Bot, User } from 'lucide-react';
 import './ContributionsStage.css';
 
 export default function ContributionsStage({ contributions, loading, currentOrder }) {
+    const markdownComponents = {
+        table({ children }) {
+            return (
+                <div className="table-wrapper">
+                    <table>{children}</table>
+                </div>
+            );
+        },
+    };
+
     if (!contributions || contributions.length === 0) {
         if (loading) {
             return (
@@ -54,7 +64,7 @@ export default function ContributionsStage({ contributions, loading, currentOrde
                             )}
 
                             <div className="entry-contribution markdown-content">
-                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                                     {entry.contribution}
                                 </ReactMarkdown>
                             </div>

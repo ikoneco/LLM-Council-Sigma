@@ -5,6 +5,15 @@ import './Stage1.css';
 
 export default function Stage1({ responses }) {
   const [activeTab, setActiveTab] = useState(0);
+  const markdownComponents = {
+    table({ children }) {
+      return (
+        <div className="table-wrapper">
+          <table>{children}</table>
+        </div>
+      );
+    },
+  };
 
   if (!responses || responses.length === 0) {
     return null;
@@ -37,7 +46,7 @@ export default function Stage1({ responses }) {
           )}
         </div>
         <div className="response-text markdown-content">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
             {responses[activeTab].response}
           </ReactMarkdown>
         </div>

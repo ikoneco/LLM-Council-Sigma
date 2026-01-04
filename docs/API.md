@@ -21,7 +21,8 @@ Retrieve the available models and default selections.
     "available_models": ["model-a", "model-b"],
     "default_expert_models": ["model-a", "model-b"],
     "default_chairman_model": "model-a",
-    "min_expert_models": 1
+    "min_expert_models": 1,
+    "thinking_supported_models": ["model-a"]
   }
   ```
 
@@ -92,7 +93,10 @@ Retrieve the full message history and metadata for a specific conversation.
         "metadata": {
           "model_selection": {
             "chairman_model": "minimax/minimax-m2.1",
-            "expert_models": ["..."]
+            "expert_models": ["..."],
+            "thinking_by_model": {
+              "minimax/minimax-m2.1": true
+            }
           }
         }
       }
@@ -125,7 +129,11 @@ Send a user query and receive the intent draft + clarification questions.
         "z-ai/glm-4.7",
         "moonshotai/kimi-k2-0905",
         "qwen/qwen3-235b-a22b-2507"
-      ]
+      ],
+      "thinking_by_model": {
+        "minimax/minimax-m2.1": true,
+        "deepseek/deepseek-v3.2": true
+      }
     }
   }
   ```
@@ -133,6 +141,7 @@ Send a user query and receive the intent draft + clarification questions.
   Notes:
   - `model_selection` is optional; defaults apply if omitted.
   - `expert_models` must include at least 1 valid model.
+  - `thinking_by_model` is a per-model toggle; unsupported models are ignored.
   - The initial stream ends after `clarification_required`; use the continue endpoint to run the full pipeline.
 
 - **Response**: `text/event-stream`

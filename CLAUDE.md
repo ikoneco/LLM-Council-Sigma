@@ -12,9 +12,10 @@ LLM Council is a multi-stage sequential collaboration system where multiple LLMs
 
 **`config.py`**
 - `COUNCIL_MODELS`: Default expert model pool (used if no selection provided)
-- `AVAILABLE_MODELS`: Full selectable model list for chairman + experts (8 total)
-- `MIN_EXPERT_MODELS`: Minimum expert model count (6)
+- `AVAILABLE_MODELS`: Full selectable model list for chairman + experts (10 total)
+- `MIN_EXPERT_MODELS`: Minimum expert model count (1)
 - `CHAIRMAN_MODEL`: Default chairman model
+- `THINKING_SUPPORTED_MODELS`: Models that accept per-model reasoning payloads
 - Uses environment variable `OPENROUTER_API_KEY` from `.env`
 - Backend runs on **port 8001**
 
@@ -22,13 +23,15 @@ LLM Council is a multi-stage sequential collaboration system where multiple LLMs
 - `query_model()`: Single async model query
 - `query_models_parallel()`: Parallel queries using `asyncio.gather()`
 - Returns dict with `content` and optional `reasoning_details`
+- Reasoning payloads are injected via `build_reasoning_payload(model, thinking_by_model)`
 - Graceful degradation: returns None on failure, continues with successful responses
 
 **`council.py`** - The Core Logic
-- `stage0_analyze_intent()`: Intent analysis
+- `stage0_generate_intent_draft()`: Intent draft + clarification questions
+- `stage0_finalize_intent()`: Final intent brief after clarifications or skip
 - `stage_brainstorm_experts()`: All selected expert models brainstorm; chairman synthesizes final expert team
 - `stage1_sequential_contributions()`: Experts contribute sequentially with quality reviews
-- `stage_verification()`: Fact-checking + reasoning audit with optional DuckDuckGo evidence
+- `stage_verification()`: Fact-checking + reasoning audit
 - `stage_synthesis_planning()`: Creates a structured synthesis plan
 - `stage_editorial_guidelines()`: Defines tone and formatting rules
 - `stage3_synthesize_final()`: Chairman synthesizes final response
@@ -37,14 +40,14 @@ LLM Council is a multi-stage sequential collaboration system where multiple LLMs
 **`storage.py`**
 - JSON-based conversation storage in `data/conversations/`
 - Each conversation: `{id, created_at, messages[]}`
-- Assistant messages store: `stage0`, `experts`, `contributions`, `stage3`, and `metadata`
+- Assistant messages store: `stage0`, `experts`, `contributions`, `stage3`, and `metadata` (including `metadata.model_selection.thinking_by_model`)
 - Legacy: `debate` may still appear on older records
 
 **`main.py`**
 - FastAPI app with CORS enabled for localhost:5173 and localhost:3000
-- `GET /api/models` exposes available models, defaults, and minimum expert count
-- `POST /api/conversations/{id}/message/stream` accepts `model_selection` and streams all stages
-- Metadata includes model selection, verification, planning, and editorial outputs
+- `GET /api/models` exposes available models, defaults, minimum expert count, and `thinking_supported_models`
+- `POST /api/conversations/{id}/message/stream` accepts `model_selection` and streams intent draft + clarifications
+- Metadata includes model selection (with `thinking_by_model`), verification, planning, and editorial outputs
 
 ### Frontend Structure (`frontend/src/`)
 
@@ -54,7 +57,8 @@ LLM Council is a multi-stage sequential collaboration system where multiple LLMs
 
 **`components/ModelSelector.jsx`**
 - Pre-Intent UI for selecting chairman and expert models
-- Enforces minimum expert model count before sending
+- Per-model “thinking” toggles for supported models
+- New threads start with no preselected models
 
 **`components/ChatInterface.jsx`**
 - Renders the model selection summary, stages, and final output
@@ -78,9 +82,11 @@ LLM Council is a multi-stage sequential collaboration system where multiple LLMs
 ## Key Design Decisions
 
 ### Model Selection Phase
-- Users select a Chairman model and at least 6 expert models from 8 total options
+- Users select a Chairman model and at least 1 expert model from the available list
+- The pipeline always runs 6 experts; models repeat round-robin if fewer are selected
+- Per-model thinking toggles are available for supported models only
 - The selection is attached to each message request and stored in metadata
-- If no selection is provided, defaults from `config.py` apply
+- If no selection is provided, defaults from `config.py` apply (UI starts blank)
 
 ### Error Handling Philosophy
 - Continue with successful responses if some models fail (graceful degradation)

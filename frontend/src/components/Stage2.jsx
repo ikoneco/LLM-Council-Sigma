@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import './Stage2.css';
 
 function deAnonymizeText(text, labelToModel) {
@@ -16,6 +17,15 @@ function deAnonymizeText(text, labelToModel) {
 
 export default function Stage2({ rankings, labelToModel, aggregateRankings }) {
   const [activeTab, setActiveTab] = useState(0);
+  const markdownComponents = {
+    table({ children }) {
+      return (
+        <div className="table-wrapper">
+          <table>{children}</table>
+        </div>
+      );
+    },
+  };
 
   if (!rankings || rankings.length === 0) {
     return null;
@@ -48,7 +58,7 @@ export default function Stage2({ rankings, labelToModel, aggregateRankings }) {
           {rankings[activeTab].model}
         </div>
         <div className="ranking-content markdown-content">
-          <ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
             {deAnonymizeText(rankings[activeTab].ranking, labelToModel)}
           </ReactMarkdown>
         </div>

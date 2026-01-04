@@ -57,6 +57,13 @@ export default function Stage0({ data, experts }) {
         h3(props) {
             return renderHeader({ ...props, level: 3 });
         },
+        table({ children }) {
+            return (
+                <div className="table-wrapper">
+                    <table>{children}</table>
+                </div>
+            );
+        },
     };
 
     return (

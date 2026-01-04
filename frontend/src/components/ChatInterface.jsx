@@ -7,6 +7,7 @@ import ContributionsStage from './ContributionsStage';
 import Stage3 from './Stage3';
 import ModelSelector from './ModelSelector';
 import IntentClarificationStage from './IntentClarificationStage';
+import { normalizeMarkdownTables } from '../utils/markdown';
 import './ChatInterface.css';
 
 export default function ChatInterface({
@@ -390,7 +391,7 @@ export default function ChatInterface({
                           <div className="verification-report">
                             <div className="report-content markdown-content">
                               <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                                {msg.metadata.verification_data}
+                                {normalizeMarkdownTables(msg.metadata.verification_data)}
                               </ReactMarkdown>
                             </div>
                           </div>
@@ -414,7 +415,7 @@ export default function ChatInterface({
                         <div className="planning-report">
                           <div className="report-content markdown-content">
                             <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                              {msg.metadata.synthesis_plan}
+                              {normalizeMarkdownTables(msg.metadata.synthesis_plan, { unwrapFence: true })}
                             </ReactMarkdown>
                           </div>
                         </div>
@@ -438,7 +439,7 @@ export default function ChatInterface({
                         <div className="editorial-report">
                           <div className="report-content markdown-content">
                             <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                              {msg.metadata.editorial_guidelines}
+                              {normalizeMarkdownTables(msg.metadata.editorial_guidelines)}
                             </ReactMarkdown>
                           </div>
                         </div>

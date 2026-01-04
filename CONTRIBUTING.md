@@ -16,7 +16,7 @@ We welcome contributions to correct bugs, improve prompts, or add new models! Be
 ## Core Logic Locations
 
 - **Logic**: If you want to change *how* the council thinks (prompts, stages, flow), edit `backend/council.py`.
-- **Models**: If you want to change *who* is in the council, edit `backend/config.py` (`AVAILABLE_MODELS`, `COUNCIL_MODELS`, `MIN_EXPERT_MODELS`).
+- **Models**: If you want to change *who* is in the council, edit `backend/config.py` (`AVAILABLE_MODELS`, `COUNCIL_MODELS`, `MIN_EXPERT_MODELS`, `THINKING_SUPPORTED_MODELS`).
 - **UI**: If you want to change how it *looks*, check `frontend/src/components/ChatInterface.jsx` and `frontend/src/components/ModelSelector.jsx`.
 
 ## Pull Request Guidelines
@@ -27,7 +27,7 @@ We welcome contributions to correct bugs, improve prompts, or add new models! Be
 
 ## Adding New Models
 
-To add a new model, append its OpenRouter ID to `AVAILABLE_MODELS` in `backend/config.py`. Update `COUNCIL_MODELS` if it should be part of the default expert pool. Ensure the model is capable of instruction following and JSON output if used for structured tasks.
+To add a new model, append its OpenRouter ID to `AVAILABLE_MODELS` in `backend/config.py`. Update `COUNCIL_MODELS` if it should be part of the default expert pool. If the model supports OpenRouter reasoning payloads, add it to `THINKING_SUPPORTED_MODELS` so the per-model “thinking” toggle becomes available in the UI. Ensure the model is capable of instruction following and JSON output if used for structured tasks.
 
 ## License
 

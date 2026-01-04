@@ -151,6 +151,59 @@ body {
   margin-bottom: 0.95em;
 }
 
+.markdown-content .table-wrapper {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  margin: 16px 0;
+  display: block;
+  scrollbar-gutter: stable both-edges;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+}
+
+.markdown-content table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95em;
+  table-layout: auto;
+}
+
+.markdown-content th,
+.markdown-content td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-divider);
+  vertical-align: top;
+  text-align: left;
+  min-width: 200px;
+  max-width: 360px;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+
+.markdown-content thead th {
+  background: var(--color-surface-highlight);
+  color: var(--color-text-main);
+  font-weight: 600;
+  border-bottom: 1px solid var(--color-border);
+}
+
+@media (max-width: 720px) {
+  .markdown-content th,
+  .markdown-content td {
+    min-width: 160px;
+    max-width: 280px;
+  }
+}
+
 .markdown-content li {
   margin-bottom: 0.5em;
   padding-left: 0.25em;

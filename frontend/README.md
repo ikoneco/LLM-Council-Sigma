@@ -21,4 +21,6 @@ The app runs on `http://localhost:5173` and expects the backend at `http://local
 ## Notes
 
 - Model selection is loaded from `/api/models`.
+- New threads start with no preselected models; users choose a chairman + experts.
+- Per-model “thinking” toggles are available for supported models.
 - Streaming responses are handled in `src/api.js`.
