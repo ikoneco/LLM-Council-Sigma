@@ -958,6 +958,7 @@ async def stage_verification(
         user_query: str, 
         contributions: List[Dict[str, Any]],
         history: List[Dict[str, Any]] = None,
+        analysis_model: Optional[str] = None,
         thinking_by_model: Optional[Dict[str, bool]] = None,
 ) -> str:
     """Stage 2.5: Verify claims and audit reasoning across all contributions."""
@@ -998,12 +999,13 @@ Return ONLY a JSON array of objects:
     search_targets = []
     try:
         messages = [{"role": "user", "content": query_gen_prompt}]
+        model = analysis_model or CHAIRMAN_MODEL
         response = await query_model(
-            "google/gemini-2.0-flash-001",
+            model,
             messages,
-            extra_body=build_reasoning_payload("google/gemini-2.0-flash-001", thinking_by_model),
+            extra_body=build_reasoning_payload(model, thinking_by_model),
         )
-        content = response.get('content', '[]')
+        content = response.get('content', '[]') if response else "[]"
         import json
         import re
         json_match = re.search(r'\[.*\]', content, re.DOTALL)
@@ -1151,10 +1153,11 @@ Focus on accurate numbers, dates, pricing, and technical facts, AND identify rea
 Provide your verification report now. Include both factual and reasoning issues:"""
 
     messages = [{"role": "user", "content": verification_prompt}]
+    model = analysis_model or CHAIRMAN_MODEL
     response = await query_model(
-        "google/gemini-2.0-flash-001",
+        model,
         messages,
-        extra_body=build_reasoning_payload("google/gemini-2.0-flash-001", thinking_by_model),
+        extra_body=build_reasoning_payload(model, thinking_by_model),
     )
     return response.get('content', 'Verification unavailable.') if response else "Verification unavailable."
 
@@ -1165,6 +1168,7 @@ async def stage_synthesis_planning(
     intent_analysis: str,
     verification_data: str,
     history: List[Dict[str, Any]] = None,
+    analysis_model: Optional[str] = None,
     thinking_by_model: Optional[Dict[str, bool]] = None,
 ) -> str:
     """
@@ -1224,10 +1228,11 @@ You are the Synthesis Architect. Create a STRUCTURED PLAN for the Chairman's fin
 Provide the synthesis plan now:"""
 
     messages = [{"role": "user", "content": planning_prompt}]
+    model = analysis_model or CHAIRMAN_MODEL
     response = await query_model(
-        "google/gemini-2.0-flash-001",
+        model,
         messages,
-        extra_body=build_reasoning_payload("google/gemini-2.0-flash-001", thinking_by_model),
+        extra_body=build_reasoning_payload(model, thinking_by_model),
     )
     return response.get('content', 'Planning unavailable.') if response else "Planning unavailable."
 
@@ -1238,6 +1243,7 @@ async def stage_editorial_guidelines(
     contributions: List[Dict[str, Any]],
     synthesis_plan: str,
     history: List[Dict[str, Any]] = None,
+    analysis_model: Optional[str] = None,
     thinking_by_model: Optional[Dict[str, bool]] = None,
 ) -> str:
     """
@@ -1307,10 +1313,11 @@ Do NOT wrap the output in markdown code blocks (```). Provide raw markdown only.
 Provide the editorial guidelines now:"""
 
     messages = [{"role": "user", "content": editorial_prompt}]
+    model = analysis_model or CHAIRMAN_MODEL
     response = await query_model(
-        "google/gemini-2.0-flash-001",
+        model,
         messages,
-        extra_body=build_reasoning_payload("google/gemini-2.0-flash-001", thinking_by_model),
+        extra_body=build_reasoning_payload(model, thinking_by_model),
     )
     return response.get('content', 'Editorial guidelines unavailable.').replace("```markdown", "").replace("```", "") if response else "Editorial guidelines unavailable."
 
@@ -1502,6 +1509,7 @@ async def run_full_council(
         user_query,
         contributions,
         history,
+        analysis_model=chairman_model,
         thinking_by_model=thinking_by_model,
     )
     
@@ -1512,6 +1520,7 @@ async def run_full_council(
         intent_analysis, 
         verification_data,
         history,
+        analysis_model=chairman_model,
         thinking_by_model=thinking_by_model,
     )
     
@@ -1522,6 +1531,7 @@ async def run_full_council(
         contributions,
         synthesis_plan,
         history,
+        analysis_model=chairman_model,
         thinking_by_model=thinking_by_model,
     )
     

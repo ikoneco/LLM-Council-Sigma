@@ -354,6 +354,7 @@ async def continue_message_stream(conversation_id: str, request: ContinueMessage
                 user_query,
                 contributions,
                 history,
+                analysis_model=chairman_model,
                 thinking_by_model=thinking_by_model,
             )
             yield f"data: {json.dumps({'type': 'verification_complete', 'data': verification_data})}\n\n"
@@ -366,6 +367,7 @@ async def continue_message_stream(conversation_id: str, request: ContinueMessage
                 intent_analysis,
                 verification_data,
                 history,
+                analysis_model=chairman_model,
                 thinking_by_model=thinking_by_model,
             )
             yield f"data: {json.dumps({'type': 'planning_complete', 'data': synthesis_plan})}\n\n"
@@ -378,6 +380,7 @@ async def continue_message_stream(conversation_id: str, request: ContinueMessage
                 contributions,
                 synthesis_plan,
                 history,
+                analysis_model=chairman_model,
                 thinking_by_model=thinking_by_model,
             )
             yield f"data: {json.dumps({'type': 'editorial_complete', 'data': editorial_guidelines})}\n\n"
