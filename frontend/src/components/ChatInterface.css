@@ -31,9 +31,10 @@
 }
 
 .empty-state h2 {
-  font-family: var(--font-serif);
-  font-size: 2.5rem;
-  font-weight: 300;
+  font-family: var(--font-display);
+  font-size: var(--text-title-xl);
+  font-weight: 500;
+  letter-spacing: var(--tracking-tight);
   color: var(--color-text-main);
   margin-bottom: 24px;
 }
@@ -137,10 +138,10 @@
 
 /* Stage Typography Overrides */
 .stage-title {
-  font-family: var(--font-base);
-  font-size: 0.8rem;
+  font-family: var(--font-display);
+  font-size: var(--text-caption);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: var(--tracking-wide);
   color: var(--color-text-muted);
   margin-bottom: 32px;
   display: flex;
@@ -152,11 +153,11 @@
 .planning-stage .markdown-content h1,
 .planning-stage .markdown-content h2,
 .planning-stage .markdown-content h3 {
-  font-family: var(--font-serif);
+  font-family: var(--font-display);
   margin-top: 24px;
   margin-bottom: 12px;
   color: var(--color-text-main);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .planning-stage .markdown-content p {
@@ -203,9 +204,9 @@
 }
 
 .thread-status-label {
-  font-size: 0.75rem;
+  font-size: var(--text-caption);
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: var(--tracking-wide);
   color: var(--color-text-muted);
   font-weight: 600;
 }
@@ -352,12 +353,13 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-family: var(--font-serif);
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-weight: 600;
   color: var(--color-text-main);
   margin-top: 1.5em;
   margin-bottom: 0.75em;
-  font-size: 1.1rem;
+  font-size: var(--text-title-sm);
+  letter-spacing: var(--tracking-snug);
 }
 
 .header-icon {

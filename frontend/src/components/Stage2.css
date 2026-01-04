@@ -60,7 +60,7 @@
 .rank-model {
   flex: 1;
   color: #333;
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 14px;
   font-weight: 500;
 }
@@ -68,7 +68,7 @@
 .rank-score {
   color: #666;
   font-size: 13px;
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 .stage2 .tabs {
@@ -114,7 +114,7 @@
 .ranking-model {
   color: #888;
   font-size: 12px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   margin-bottom: 12px;
 }
 
@@ -143,7 +143,7 @@
 
 .parsed-ranking li {
   margin: 4px 0;
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
 }
 

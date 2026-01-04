@@ -1306,6 +1306,15 @@ Maintain continuity with prior final outputs if present.
 </editorial_guidelines>
 </inputs>
 
+<context_priority>
+1. User query + intent brief define the authoritative goals and scope.
+2. Verification report is the truth filter; correct or remove any conflicting claims.
+3. Conversation context preserves continuity; defer to the latest intent if conflicts exist.
+4. Expert contributions provide ideas and evidence to integrate or reject with justification.
+5. Synthesis plan suggests structure; adapt when the content demands a better flow.
+6. Editorial guidelines govern tone and format; clarity and usefulness come first.
+</context_priority>
+
 <chairman_guidance>
 1. Follow the Synthesis Plan as your primary structure, but adapt it when the context warrants a better organization.
 2. Honor the Editorial Guidelines for tone, voice, and format while keeping clarity and usefulness first.

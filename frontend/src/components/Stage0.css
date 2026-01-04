@@ -14,16 +14,16 @@
 
 .analysis-content h2,
 .analysis-content h3 {
-    font-family: var(--font-serif);
+    font-family: var(--font-display);
     margin-bottom: 12px;
 }
 
 .analysis-content h2 {
-    font-size: 1.35rem;
+    font-size: var(--text-title-md);
 }
 
 .analysis-content h3 {
-    font-size: 1.25rem;
+    font-size: var(--text-title-sm);
 }
 
 /* Experts Grid */
