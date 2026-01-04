@@ -36,6 +36,18 @@ AVAILABLE_MODELS = [
     "mistralai/devstral-2512:free",
 ]
 
+# Models that support OpenRouter reasoning/thinking parameters
+THINKING_SUPPORTED_MODELS = {
+    "minimax/minimax-m2.1",
+    "deepseek/deepseek-v3.2",
+    "z-ai/glm-4.7",
+    "qwen/qwen3-235b-a22b-2507",
+    "openai/gpt-5.2",
+    "google/gemini-3-flash-preview",
+    "xiaomi/mimo-v2-flash:free",
+}
+THINKING_EFFORT = "medium"
+
 # Selection rules
 MIN_EXPERT_MODELS = 1
 DEFAULT_NUM_EXPERTS = 6

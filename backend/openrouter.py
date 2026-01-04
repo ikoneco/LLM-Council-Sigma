@@ -2,12 +2,36 @@
 
 import httpx
 from typing import List, Dict, Any, Optional, Tuple
-from .config import OPENROUTER_API_KEY, OPENROUTER_API_URL, SEARCH_MODEL, SEARCH_TIMEOUT, SEARCH_CONTEXT_SIZE
+from .config import (
+    OPENROUTER_API_KEY,
+    OPENROUTER_API_URL,
+    SEARCH_MODEL,
+    SEARCH_TIMEOUT,
+    SEARCH_CONTEXT_SIZE,
+    THINKING_SUPPORTED_MODELS,
+    THINKING_EFFORT,
+)
 
 _SEARCH_MODELS_NO_TOOLS = {
     "openai/gpt-4o-mini-search-preview",
     "openai/gpt-4o-search-preview",
 }
+
+
+def _thinking_enabled_for_model(model: str, thinking_by_model: Optional[Dict[str, bool]]) -> bool:
+    if not thinking_by_model:
+        return False
+    return bool(thinking_by_model.get(model))
+
+
+def build_reasoning_payload(model: str, thinking_by_model: Optional[Dict[str, bool]]) -> Dict[str, Any]:
+    if not _thinking_enabled_for_model(model, thinking_by_model):
+        return {}
+    if model not in THINKING_SUPPORTED_MODELS:
+        return {}
+    if model.startswith("openai/"):
+        return {"reasoning": {"effort": THINKING_EFFORT}}
+    return {"reasoning": {"enabled": True}}
 
 async def query_model(
     model: str,

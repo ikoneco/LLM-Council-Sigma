@@ -21,6 +21,7 @@ export default function ChatInterface({
   const messagesEndRef = useRef(null);
   const [chairmanModel, setChairmanModel] = useState('');
   const [expertModels, setExpertModels] = useState([]);
+  const [thinkingByModel, setThinkingByModel] = useState({});
   const [selectionLocked, setSelectionLocked] = useState(false);
   const [hasEditedSelection, setHasEditedSelection] = useState(false);
 
@@ -39,9 +40,6 @@ export default function ChatInterface({
 
   const availableModels = modelCatalog?.available_models || fallbackAvailableModels;
   const minExpertModels = modelCatalog?.min_expert_models || 1;
-  const defaultChairman = modelCatalog?.default_chairman_model || 'minimax/minimax-m2.1';
-  const defaultExperts = modelCatalog?.default_expert_models || fallbackAvailableModels;
-
   useEffect(() => {
     if (!conversation) return;
     setHasEditedSelection(false);
@@ -57,6 +55,21 @@ export default function ChatInterface({
     if (selectionFromConversation) {
       setChairmanModel(selectionFromConversation.chairman_model);
       setExpertModels(selectionFromConversation.expert_models);
+      if (selectionFromConversation.thinking_by_model) {
+        setThinkingByModel(selectionFromConversation.thinking_by_model);
+      } else if (selectionFromConversation.thinking_enabled) {
+        const selectedModels = [
+          selectionFromConversation.chairman_model,
+          ...(selectionFromConversation.expert_models || []),
+        ];
+        const next = {};
+        selectedModels.forEach((model) => {
+          next[model] = true;
+        });
+        setThinkingByModel(next);
+      } else {
+        setThinkingByModel({});
+      }
       setSelectionLocked(true);
       return;
     }
@@ -64,13 +77,14 @@ export default function ChatInterface({
     setSelectionLocked(false);
     if (hasEditedSelection) return;
 
-    setChairmanModel(defaultChairman);
-    setExpertModels(defaultExperts);
-  }, [conversation, defaultChairman, defaultExperts, hasEditedSelection]);
+    setChairmanModel('');
+    setExpertModels([]);
+    setThinkingByModel({});
+  }, [conversation, hasEditedSelection]);
 
   const isSelectionValid = expertModels.length >= minExpertModels && chairmanModel;
   const modelSelectionPayload = isSelectionValid
-    ? { chairman_model: chairmanModel, expert_models: expertModels }
+    ? { chairman_model: chairmanModel, expert_models: expertModels, thinking_by_model: thinkingByModel }
     : null;
 
   const scrollToBottom = () => {
@@ -257,22 +271,44 @@ export default function ChatInterface({
                           Model Selection
                         </h3>
                         <div className="model-selection-summary">
-                          <div className="model-selection-group">
-                            <div className="model-selection-label">Chairman</div>
-                            <div className="model-selection-pill">
-                              {formatModelLabel(msg.metadata.model_selection.chairman_model)}
-                            </div>
-                          </div>
-                          <div className="model-selection-group">
-                            <div className="model-selection-label">Experts</div>
-                            <div className="model-selection-pills">
-                              {msg.metadata.model_selection.expert_models.map((model) => (
-                                <span key={model} className="model-selection-pill">
-                                  {formatModelLabel(model)}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
+                          {(() => {
+                            const thinkingMap = msg.metadata.model_selection.thinking_by_model || {};
+                            const thinkingModels = Object.keys(thinkingMap).filter((model) => thinkingMap[model]);
+                            return (
+                              <>
+                                <div className="model-selection-group">
+                                  <div className="model-selection-label">Chairman</div>
+                                  <div className="model-selection-pill">
+                                    {formatModelLabel(msg.metadata.model_selection.chairman_model)}
+                                  </div>
+                                </div>
+                                <div className="model-selection-group">
+                                  <div className="model-selection-label">Experts</div>
+                                  <div className="model-selection-pills">
+                                    {msg.metadata.model_selection.expert_models.map((model) => (
+                                      <span key={model} className="model-selection-pill">
+                                        {formatModelLabel(model)}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="model-selection-group">
+                                  <div className="model-selection-label">Thinking</div>
+                                  {thinkingModels.length ? (
+                                    <div className="model-selection-pills">
+                                      {thinkingModels.map((model) => (
+                                        <span key={model} className="model-selection-pill">
+                                          {formatModelLabel(model)}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="model-selection-pill">Off</div>
+                                  )}
+                                </div>
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
                     )}
@@ -463,10 +499,15 @@ export default function ChatInterface({
               chairmanModel={chairmanModel}
               expertModels={expertModels}
               minExpertModels={minExpertModels}
-              onChange={({ chairmanModel: nextChairman, expertModels: nextExperts }) => {
+              thinkingByModel={thinkingByModel}
+              thinkingSupportedModels={modelCatalog?.thinking_supported_models}
+              onChange={({ chairmanModel: nextChairman, expertModels: nextExperts, thinkingByModel: nextThinking }) => {
                 setHasEditedSelection(true);
                 setChairmanModel(nextChairman);
                 setExpertModels(nextExperts);
+                if (nextThinking && typeof nextThinking === 'object') {
+                  setThinkingByModel(nextThinking);
+                }
               }}
               disabled={isLoading}
             />

@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Tuple, Optional
 import json
 import re
 import asyncio
-from .openrouter import query_model, query_search_model
+from .openrouter import query_model, query_search_model, build_reasoning_payload
 from .config import (
     COUNCIL_MODELS,
     CHAIRMAN_MODEL,
@@ -372,6 +372,7 @@ async def stage0_generate_intent_draft(
     user_query: str,
     history: List[Dict[str, Any]] = None,
     analysis_model: Optional[str] = None,
+    thinking_by_model: Optional[Dict[str, bool]] = None,
 ) -> Dict[str, Any]:
     """
     Phase 1: Draft intent analysis + clarification questions.
@@ -472,7 +473,11 @@ Generate the JSON now:"""
 
     messages = [{"role": "user", "content": intent_prompt}]
     model_name = analysis_model or CHAIRMAN_MODEL
-    response = await query_model(model_name, messages)
+    response = await query_model(
+        model_name,
+        messages,
+        extra_body=build_reasoning_payload(model_name, thinking_by_model),
+    )
 
     if response is None:
         return _normalize_intent_draft(None, user_query)
@@ -487,6 +492,7 @@ async def stage0_finalize_intent(
     clarification_payload: Dict[str, Any],
     history: List[Dict[str, Any]] = None,
     analysis_model: Optional[str] = None,
+    thinking_by_model: Optional[Dict[str, bool]] = None,
 ) -> str:
     """
     Phase 3: Final intent packet after clarification (or skip).
@@ -582,7 +588,11 @@ Provide the intent brief now:"""
 
     messages = [{"role": "user", "content": intent_prompt}]
     model_name = analysis_model or CHAIRMAN_MODEL
-    response = await query_model(model_name, messages)
+    response = await query_model(
+        model_name,
+        messages,
+        extra_body=build_reasoning_payload(model_name, thinking_by_model),
+    )
 
     if response is None:
         return "Intent analysis unavailable."
@@ -597,6 +607,7 @@ async def stage_brainstorm_experts(
     expert_models: Optional[List[str]] = None,
     chairman_model: Optional[str] = None,
     num_experts: int = DEFAULT_NUM_EXPERTS,
+    thinking_by_model: Optional[Dict[str, bool]] = None,
 ) -> Tuple[str, List[Dict[str, str]]]:
     """
     Stage 0.5: All models brainstorm to define experts.
@@ -653,7 +664,11 @@ Provide your expert suggestions now:"""
     # Collect brainstorm from all models in parallel
     import asyncio
     tasks = [
-        query_model(model, [{"role": "user", "content": brainstorm_prompt}])
+        query_model(
+            model,
+            [{"role": "user", "content": brainstorm_prompt}],
+            extra_body=build_reasoning_payload(model, thinking_by_model),
+        )
         for model in models
     ]
     responses = await asyncio.gather(*tasks, return_exceptions=True)
@@ -726,7 +741,11 @@ Respond with a valid JSON object ONLY:
 Create the optimal expert team now:"""
 
     messages = [{"role": "user", "content": synthesis_prompt}]
-    response = await query_model(chairman, messages)
+    response = await query_model(
+        chairman,
+        messages,
+        extra_body=build_reasoning_payload(chairman, thinking_by_model),
+    )
     
     default_experts = build_default_experts(num_experts)
     
@@ -792,6 +811,7 @@ async def get_expert_contribution(
     history: List[Dict[str, Any]] = None,
     expert_models: Optional[List[str]] = None,
     num_experts: int = DEFAULT_NUM_EXPERTS,
+    thinking_by_model: Optional[Dict[str, bool]] = None,
 ) -> str:
     """
     Get a contribution from an expert, building on previous work with rigorous quality focus.
@@ -882,7 +902,11 @@ Structure your response as follows:
 Provide your rigorous expert contribution now:"""
 
     messages = [{"role": "user", "content": expert_prompt}]
-    response = await query_model(model, messages)
+    response = await query_model(
+        model,
+        messages,
+        extra_body=build_reasoning_payload(model, thinking_by_model),
+    )
     
     if response is None:
         return "Expert contribution unavailable."
@@ -897,6 +921,7 @@ async def stage1_sequential_contributions(
     history: List[Dict[str, Any]] = None,
     expert_models: Optional[List[str]] = None,
     num_experts: int = DEFAULT_NUM_EXPERTS,
+    thinking_by_model: Optional[Dict[str, bool]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Stage 1: Sequential expert contributions.
@@ -916,6 +941,7 @@ async def stage1_sequential_contributions(
             history,
             expert_models=expert_models,
             num_experts=num_experts,
+            thinking_by_model=thinking_by_model,
         )
         
         contributions.append({
@@ -931,7 +957,8 @@ async def stage1_sequential_contributions(
 async def stage_verification(
         user_query: str, 
         contributions: List[Dict[str, Any]],
-        history: List[Dict[str, Any]] = None
+        history: List[Dict[str, Any]] = None,
+        thinking_by_model: Optional[Dict[str, bool]] = None,
 ) -> str:
     """Stage 2.5: Verify claims and audit reasoning across all contributions."""
     context_str = format_conversation_history(history or [])
@@ -971,7 +998,11 @@ Return ONLY a JSON array of objects:
     search_targets = []
     try:
         messages = [{"role": "user", "content": query_gen_prompt}]
-        response = await query_model("google/gemini-2.0-flash-001", messages)
+        response = await query_model(
+            "google/gemini-2.0-flash-001",
+            messages,
+            extra_body=build_reasoning_payload("google/gemini-2.0-flash-001", thinking_by_model),
+        )
         content = response.get('content', '[]')
         import json
         import re
@@ -1120,7 +1151,11 @@ Focus on accurate numbers, dates, pricing, and technical facts, AND identify rea
 Provide your verification report now. Include both factual and reasoning issues:"""
 
     messages = [{"role": "user", "content": verification_prompt}]
-    response = await query_model("google/gemini-2.0-flash-001", messages)
+    response = await query_model(
+        "google/gemini-2.0-flash-001",
+        messages,
+        extra_body=build_reasoning_payload("google/gemini-2.0-flash-001", thinking_by_model),
+    )
     return response.get('content', 'Verification unavailable.') if response else "Verification unavailable."
 
 
@@ -1129,7 +1164,8 @@ async def stage_synthesis_planning(
     contributions: List[Dict[str, Any]],
     intent_analysis: str,
     verification_data: str,
-    history: List[Dict[str, Any]] = None
+    history: List[Dict[str, Any]] = None,
+    thinking_by_model: Optional[Dict[str, bool]] = None,
 ) -> str:
     """
     Stage 2.75: Create a structured plan for the chairman.
@@ -1188,7 +1224,11 @@ You are the Synthesis Architect. Create a STRUCTURED PLAN for the Chairman's fin
 Provide the synthesis plan now:"""
 
     messages = [{"role": "user", "content": planning_prompt}]
-    response = await query_model("google/gemini-2.0-flash-001", messages)
+    response = await query_model(
+        "google/gemini-2.0-flash-001",
+        messages,
+        extra_body=build_reasoning_payload("google/gemini-2.0-flash-001", thinking_by_model),
+    )
     return response.get('content', 'Planning unavailable.') if response else "Planning unavailable."
 
 
@@ -1197,7 +1237,8 @@ async def stage_editorial_guidelines(
     intent_analysis: str,
     contributions: List[Dict[str, Any]],
     synthesis_plan: str,
-    history: List[Dict[str, Any]] = None
+    history: List[Dict[str, Any]] = None,
+    thinking_by_model: Optional[Dict[str, bool]] = None,
 ) -> str:
     """
     Stage 2.9: Create editorial guidelines for the chairman's writing style.
@@ -1266,7 +1307,11 @@ Do NOT wrap the output in markdown code blocks (```). Provide raw markdown only.
 Provide the editorial guidelines now:"""
 
     messages = [{"role": "user", "content": editorial_prompt}]
-    response = await query_model("google/gemini-2.0-flash-001", messages)
+    response = await query_model(
+        "google/gemini-2.0-flash-001",
+        messages,
+        extra_body=build_reasoning_payload("google/gemini-2.0-flash-001", thinking_by_model),
+    )
     return response.get('content', 'Editorial guidelines unavailable.').replace("```markdown", "").replace("```", "") if response else "Editorial guidelines unavailable."
 
 
@@ -1279,6 +1324,7 @@ async def stage3_synthesize_final(
     editorial_guidelines: str = "",
     history: List[Dict[str, Any]] = None,
     chairman_model: Optional[str] = None,
+    thinking_by_model: Optional[Dict[str, bool]] = None,
 ) -> Dict[str, Any]:
     """Stage 3: Chairman synthesizes all contributions following the plan and editorial guidelines."""
     context_str = format_conversation_history(history or [])
@@ -1368,7 +1414,11 @@ Do not include meta-commentary about the process.
         {"role": "user", "content": chairman_prompt},
     ]
     chairman = chairman_model or CHAIRMAN_MODEL
-    response = await query_model(chairman, messages)
+    response = await query_model(
+        chairman,
+        messages,
+        extra_body=build_reasoning_payload(chairman, thinking_by_model),
+    )
     return {"model": chairman, "response": response.get('content', 'Error: Synthesis failed.') if response else "Error: Synthesis failed."}
 
 
@@ -1392,6 +1442,7 @@ async def run_full_council(
     expert_models: Optional[List[str]] = None,
     chairman_model: Optional[str] = None,
     num_experts: Optional[int] = None,
+    thinking_by_model: Optional[Dict[str, bool]] = None,
 ) -> Tuple[str, List, List, str, str, str, Dict, Dict]:
     """
     Run the complete sequential expert collaboration process.
@@ -1404,6 +1455,7 @@ async def run_full_council(
         user_query,
         history,
         analysis_model=chairman_model,
+        thinking_by_model=thinking_by_model,
     )
     intent_analysis = await stage0_finalize_intent(
         user_query,
@@ -1411,6 +1463,7 @@ async def run_full_council(
         {"skip": True, "answers": [], "free_text": ""},
         history,
         analysis_model=chairman_model,
+        thinking_by_model=thinking_by_model,
     )
     
     models = expert_models or COUNCIL_MODELS
@@ -1424,6 +1477,7 @@ async def run_full_council(
         expert_models=models,
         chairman_model=chairman_model,
         num_experts=expert_count,
+        thinking_by_model=thinking_by_model,
     )
     
     # Stage 1: Sequential expert contributions
@@ -1434,6 +1488,7 @@ async def run_full_council(
         history,
         expert_models=models,
         num_experts=expert_count,
+        thinking_by_model=thinking_by_model,
     )
     
     if not contributions:
@@ -1443,7 +1498,12 @@ async def run_full_council(
         }, {}
     
     # Stage 2.5: Verification
-    verification_data = await stage_verification(user_query, contributions, history)
+    verification_data = await stage_verification(
+        user_query,
+        contributions,
+        history,
+        thinking_by_model=thinking_by_model,
+    )
     
     # Stage 2.75: Synthesis Planning
     synthesis_plan = await stage_synthesis_planning(
@@ -1451,7 +1511,8 @@ async def run_full_council(
         contributions, 
         intent_analysis, 
         verification_data,
-        history
+        history,
+        thinking_by_model=thinking_by_model,
     )
     
     # Stage 2.9: Editorial Guidelines
@@ -1460,7 +1521,8 @@ async def run_full_council(
         intent_analysis,
         contributions,
         synthesis_plan,
-        history
+        history,
+        thinking_by_model=thinking_by_model,
     )
     
     # Stage 3: Final Synthesis
@@ -1473,6 +1535,7 @@ async def run_full_council(
         editorial_guidelines=editorial_guidelines,
         history=history,
         chairman_model=chairman_model,
+        thinking_by_model=thinking_by_model,
     )
     
     metadata = {

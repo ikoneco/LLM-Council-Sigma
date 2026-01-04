@@ -21,7 +21,14 @@ from .council import (
     stage_editorial_guidelines,
     stage3_synthesize_final,
 )
-from .config import AVAILABLE_MODELS, COUNCIL_MODELS, CHAIRMAN_MODEL, MIN_EXPERT_MODELS, DEFAULT_NUM_EXPERTS
+from .config import (
+    AVAILABLE_MODELS,
+    COUNCIL_MODELS,
+    CHAIRMAN_MODEL,
+    MIN_EXPERT_MODELS,
+    DEFAULT_NUM_EXPERTS,
+    THINKING_SUPPORTED_MODELS,
+)
 
 app = FastAPI(title="LLM Council API")
 
@@ -41,6 +48,8 @@ class CreateConversationRequest(BaseModel):
 class ModelSelection(BaseModel):
     chairman_model: str
     expert_models: List[str]
+    thinking_enabled: Optional[bool] = False
+    thinking_by_model: Optional[Dict[str, bool]] = None
 
 
 class SendMessageRequest(BaseModel):
@@ -82,9 +91,9 @@ class Conversation(BaseModel):
     messages: List[Dict[str, Any]]
 
 
-def normalize_model_selection(selection: Optional[Any]) -> Tuple[str, List[str]]:
+def normalize_model_selection(selection: Optional[Any]) -> Tuple[str, List[str], Dict[str, bool]]:
     if selection is None:
-        return CHAIRMAN_MODEL, COUNCIL_MODELS
+        return CHAIRMAN_MODEL, COUNCIL_MODELS, {}
 
     if isinstance(selection, dict):
         try:
@@ -118,7 +127,18 @@ def normalize_model_selection(selection: Optional[Any]) -> Tuple[str, List[str]]
             detail=f"Select at least {MIN_EXPERT_MODELS} expert models",
         )
 
-    return selection.chairman_model, expert_models
+    thinking_by_model: Dict[str, bool] = {}
+    raw_map = getattr(selection, "thinking_by_model", None)
+    if isinstance(raw_map, dict):
+        for model, enabled in raw_map.items():
+            if model in THINKING_SUPPORTED_MODELS and enabled:
+                thinking_by_model[model] = True
+    elif bool(getattr(selection, "thinking_enabled", False)):
+        for model in {selection.chairman_model, *expert_models}:
+            if model in THINKING_SUPPORTED_MODELS:
+                thinking_by_model[model] = True
+
+    return selection.chairman_model, expert_models, thinking_by_model
 
 
 @app.get("/")
@@ -133,6 +153,7 @@ async def list_models():
         "default_expert_models": COUNCIL_MODELS,
         "default_chairman_model": CHAIRMAN_MODEL,
         "min_expert_models": MIN_EXPERT_MODELS,
+        "thinking_supported_models": sorted(THINKING_SUPPORTED_MODELS),
     }
 
 
@@ -173,10 +194,11 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     is_first_message = len(conversation["messages"]) == 0
-    chairman_model, expert_models = normalize_model_selection(request.model_selection)
+    chairman_model, expert_models, thinking_by_model = normalize_model_selection(request.model_selection)
     model_selection = {
         "chairman_model": chairman_model,
         "expert_models": expert_models,
+        "thinking_by_model": thinking_by_model,
     }
 
     async def event_generator():
@@ -196,6 +218,7 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
                 request.content,
                 history,
                 analysis_model=chairman_model,
+                thinking_by_model=thinking_by_model,
             )
             storage.add_assistant_message_intent_draft(
                 conversation_id,
@@ -244,7 +267,7 @@ async def continue_message_stream(conversation_id: str, request: ContinueMessage
     history = conversation["messages"][:pending_index - 1]
 
     model_selection_payload = (pending_message.get("metadata") or {}).get("model_selection")
-    chairman_model, expert_models = normalize_model_selection(model_selection_payload)
+    chairman_model, expert_models, thinking_by_model = normalize_model_selection(model_selection_payload)
     num_experts = DEFAULT_NUM_EXPERTS
 
     clarification_payload = {
@@ -275,6 +298,7 @@ async def continue_message_stream(conversation_id: str, request: ContinueMessage
                 clarification_payload,
                 history,
                 analysis_model=chairman_model,
+                thinking_by_model=thinking_by_model,
             )
             yield f"data: {json.dumps({'type': 'stage0_complete', 'data': {'analysis': intent_analysis}})}\n\n"
 
@@ -287,6 +311,7 @@ async def continue_message_stream(conversation_id: str, request: ContinueMessage
                 expert_models=expert_models,
                 chairman_model=chairman_model,
                 num_experts=num_experts,
+                thinking_by_model=thinking_by_model,
             )
             yield f"data: {json.dumps({'type': 'brainstorm_complete', 'data': {'brainstorm_content': brainstorm_content, 'experts': experts}})}\n\n"
 
@@ -308,6 +333,7 @@ async def continue_message_stream(conversation_id: str, request: ContinueMessage
                     history,
                     expert_models=expert_models,
                     num_experts=num_experts,
+                    thinking_by_model=thinking_by_model,
                 )
 
                 entry = {
@@ -324,7 +350,12 @@ async def continue_message_stream(conversation_id: str, request: ContinueMessage
 
             # Stage 2.5: Verification
             yield f"data: {json.dumps({'type': 'verification_start'})}\n\n"
-            verification_data = await stage_verification(user_query, contributions, history)
+            verification_data = await stage_verification(
+                user_query,
+                contributions,
+                history,
+                thinking_by_model=thinking_by_model,
+            )
             yield f"data: {json.dumps({'type': 'verification_complete', 'data': verification_data})}\n\n"
 
             # Stage 2.75: Synthesis Planning
@@ -334,7 +365,8 @@ async def continue_message_stream(conversation_id: str, request: ContinueMessage
                 contributions,
                 intent_analysis,
                 verification_data,
-                history
+                history,
+                thinking_by_model=thinking_by_model,
             )
             yield f"data: {json.dumps({'type': 'planning_complete', 'data': synthesis_plan})}\n\n"
 
@@ -345,7 +377,8 @@ async def continue_message_stream(conversation_id: str, request: ContinueMessage
                 intent_analysis,
                 contributions,
                 synthesis_plan,
-                history
+                history,
+                thinking_by_model=thinking_by_model,
             )
             yield f"data: {json.dumps({'type': 'editorial_complete', 'data': editorial_guidelines})}\n\n"
 
@@ -360,6 +393,7 @@ async def continue_message_stream(conversation_id: str, request: ContinueMessage
                 editorial_guidelines=editorial_guidelines,
                 history=history,
                 chairman_model=chairman_model,
+                thinking_by_model=thinking_by_model,
             )
             yield f"data: {json.dumps({'type': 'stage3_complete', 'data': stage3_result})}\n\n"
 
@@ -372,6 +406,7 @@ async def continue_message_stream(conversation_id: str, request: ContinueMessage
                 "model_selection": {
                     "chairman_model": chairman_model,
                     "expert_models": expert_models,
+                    "thinking_by_model": thinking_by_model,
                 },
                 "clarification_answers": clarification_payload,
             }

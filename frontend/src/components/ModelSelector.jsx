@@ -22,16 +22,25 @@ export default function ModelSelector({
   chairmanModel,
   expertModels,
   minExpertModels,
+  thinkingByModel,
+  thinkingSupportedModels,
   onChange,
   disabled,
 }) {
   const selectedCount = expertModels.length;
   const isValid = selectedCount >= minExpertModels;
+  const supportedSet = new Set(thinkingSupportedModels || []);
+  const isThinkingSupported = (model) => (thinkingSupportedModels ? supportedSet.has(model) : true);
+  const isThinkingEnabled = (model) => Boolean(thinkingByModel?.[model]);
+  const selectedSupportedCount = [chairmanModel, ...expertModels]
+    .filter((model, index, arr) => arr.indexOf(model) === index)
+    .filter((model) => isThinkingSupported(model) && isThinkingEnabled(model)).length;
 
   const handleChairmanChange = (event) => {
     onChange({
       chairmanModel: event.target.value,
       expertModels,
+      thinkingByModel,
     });
   };
 
@@ -47,6 +56,21 @@ export default function ModelSelector({
     onChange({
       chairmanModel,
       expertModels: ordered,
+      thinkingByModel,
+    });
+  };
+
+  const handleThinkingToggle = (model, enabled) => {
+    const next = { ...(thinkingByModel || {}) };
+    if (enabled) {
+      next[model] = true;
+    } else {
+      delete next[model];
+    }
+    onChange({
+      chairmanModel,
+      expertModels,
+      thinkingByModel: next,
     });
   };
 
@@ -64,49 +88,105 @@ export default function ModelSelector({
           <label className="model-selector-label" htmlFor="chairman-select">
             Chairman model
           </label>
-          <select
-            id="chairman-select"
-            value={chairmanModel}
-            onChange={handleChairmanChange}
-            disabled={disabled}
-          >
-            {availableModels.map((model) => (
-              <option key={model} value={model}>
-                {formatModelLabel(model)}
+          <div className="model-selector-row">
+            <select
+              id="chairman-select"
+              value={chairmanModel}
+              onChange={handleChairmanChange}
+              disabled={disabled}
+            >
+              <option value="" disabled>
+                Select a chairman model
               </option>
-            ))}
-          </select>
+              {availableModels.map((model) => (
+                <option key={model} value={model}>
+                  {formatModelLabel(model)}
+                </option>
+              ))}
+            </select>
+            <label
+              className={`switch ${disabled || !isThinkingSupported(chairmanModel) ? 'disabled' : ''}`}
+              title={isThinkingSupported(chairmanModel) ? 'Enable reasoning for this model' : 'Thinking not supported'}
+            >
+              <input
+                type="checkbox"
+                checked={isThinkingEnabled(chairmanModel)}
+                onChange={(event) => handleThinkingToggle(chairmanModel, event.target.checked)}
+                disabled={disabled || !isThinkingSupported(chairmanModel)}
+              />
+              <span className="switch-track">
+                <span className="switch-thumb" />
+              </span>
+              <span className="switch-label">Thinking</span>
+            </label>
+          </div>
         </div>
 
         <div className="model-selector-section">
-          <div className="model-selector-label">
-            Expert models (select any number)
+          <div className="model-selector-label-row">
+            <div className="model-selector-label">Expert models</div>
+            <div className="model-selector-meta">Select any number (models repeat if fewer than 6).</div>
           </div>
           <div className="model-options">
             {availableModels.map((model) => {
               const checked = expertModels.includes(model);
+              const supported = isThinkingSupported(model);
+              const toggleDisabled = disabled || !checked || !supported;
               return (
-                <label
+                <div
                   key={model}
                   className={`model-option ${checked ? 'selected' : ''}`}
                 >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleExpert(model)}
-                    disabled={disabled}
-                  />
-                  <span className="model-option-name">{formatModelLabel(model)}</span>
-                </label>
+                  <label className="model-option-main">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleExpert(model)}
+                      disabled={disabled}
+                    />
+                    <span className="model-option-name">{formatModelLabel(model)}</span>
+                  </label>
+                  <div className="model-option-controls">
+                    <label
+                      className={`switch ${toggleDisabled ? 'disabled' : ''}`}
+                      title={
+                        !supported
+                          ? 'Thinking not supported'
+                          : checked
+                            ? 'Enable reasoning for this model'
+                            : 'Select model to enable thinking'
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isThinkingEnabled(model)}
+                        onChange={(event) => handleThinkingToggle(model, event.target.checked)}
+                        disabled={toggleDisabled}
+                      />
+                      <span className="switch-track">
+                        <span className="switch-thumb" />
+                      </span>
+                      <span className="switch-label">Thinking</span>
+                    </label>
+                  </div>
+                </div>
               );
             })}
           </div>
           {!isValid && minExpertModels > 0 && (
-            <div className="model-selector-hint">
+            <div className="model-selector-hint error">
               Select at least {minExpertModels} expert {minExpertModels === 1 ? 'model' : 'models'} to proceed.
             </div>
           )}
         </div>
+        <div className="model-selector-hint">
+          Thinking toggles apply per model and only work on supported models.
+        </div>
+        {thinkingSupportedModels && (
+          <div className="model-selector-hint">
+            Thinking enabled for {selectedSupportedCount} selected model{selectedSupportedCount === 1 ? '' : 's'}.
+          </div>
+        )}
       </div>
     </div>
   );
