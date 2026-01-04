@@ -94,6 +94,24 @@ def _extract_json(text: str) -> Optional[Dict[str, Any]]:
             return None
 
 
+def _extract_citations(annotations: Any) -> List[Dict[str, str]]:
+    citations = []
+    if not isinstance(annotations, list):
+        return citations
+    for annotation in annotations:
+        if not isinstance(annotation, dict):
+            continue
+        if annotation.get("type") != "url_citation":
+            continue
+        data = annotation.get("url_citation") or {}
+        citations.append({
+            "title": data.get("title") or "Source",
+            "url": data.get("url") or "",
+            "snippet": data.get("snippet") or "",
+        })
+    return citations
+
+
 def _strip_uncertain_intent_fields(intent_draft: Any) -> Dict[str, Any]:
     if not isinstance(intent_draft, dict):
         return {}
@@ -984,11 +1002,12 @@ Return JSON:
 
                 search_response = await query_search_model([{"role": "user", "content": search_prompt}])
                 raw_content = search_response.get("content", "") if search_response else ""
+                annotations = search_response.get("annotations") if search_response else None
                 evidence = _extract_json(raw_content) or {}
 
                 verdict = evidence.get("verdict") or "unclear"
                 summary_text = evidence.get("summary") or evidence.get("analysis") or raw_content or "No evidence summary available."
-                sources = evidence.get("sources") or []
+                sources = evidence.get("sources") or _extract_citations(annotations)
 
                 formatted_sources = []
                 if isinstance(sources, list):

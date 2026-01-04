@@ -4,6 +4,10 @@ import httpx
 from typing import List, Dict, Any, Optional, Tuple
 from .config import OPENROUTER_API_KEY, OPENROUTER_API_URL, SEARCH_MODEL, SEARCH_TIMEOUT, SEARCH_CONTEXT_SIZE
 
+_SEARCH_MODELS_NO_TOOLS = {
+    "openai/gpt-4o-mini-search-preview",
+    "openai/gpt-4o-search-preview",
+}
 
 async def query_model(
     model: str,
@@ -65,7 +69,8 @@ async def query_model(
 
                 return {
                     'content': message.get('content'),
-                    'reasoning_details': message.get('reasoning_details')
+                    'reasoning_details': message.get('reasoning_details'),
+                    'annotations': message.get('annotations'),
                 }
 
         except Exception as e:
@@ -94,10 +99,11 @@ async def query_search_model(
     extra_body = {
         "temperature": 0,
         "max_tokens": max_tokens,
-        "tools": [{"type": "web_search"}],
-        "tool_choice": "auto",
         "web_search_options": {"search_context_size": SEARCH_CONTEXT_SIZE},
     }
+    if search_model not in _SEARCH_MODELS_NO_TOOLS:
+        extra_body["tools"] = [{"type": "web_search"}]
+        extra_body["tool_choice"] = "auto"
     return await query_model(
         search_model,
         messages,
