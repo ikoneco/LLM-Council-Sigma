@@ -476,16 +476,15 @@ Do NOT ask more questions.
 <output_format>
 Return Markdown ONLY using this template:
 
-## Brainstorm Intent Brief
+## Intent Brief (Proxy for User Input)
 
 ### Executive Summary
 - One-sentence synthesis of what the user needs and why.
 
-### Structured Prompt for Brainstorm
-**Role**: Expert team selector for the user's request.  
-**Task**: Propose the optimal 6-expert lineup tailored to the user’s goals.  
-**Primary Objective**: ...
-**Secondary Objectives**: ...
+### Core Instruction (Write as Direct Guidance)
+- Act as if the user asked you to: ...
+- Primary objective: ...
+- Secondary objectives: ...
 
 ### User Intent (High-Confidence)
 - Explicit ask: ...
@@ -513,13 +512,13 @@ Return Markdown ONLY using this template:
 - Completeness:
 - Risk tolerance:
 
-### In Scope / Out of Scope
+### Scope Boundaries
 - In scope (must cover): ...
 - Out of scope (exclude): ...
 
-### Expert Team Guidance
-- Domains to include: ...
-- Key angles to cover: ...
+### Execution Guidance (All Stages)
+- Priorities to optimize for: ...
+- Key angles to address: ...
 - De-prioritize / avoid: ...
 
 ### Confidence
@@ -531,9 +530,9 @@ Rules:
 - Ensure every section is present (use "None noted" if empty).
 - Do not include assumptions, guesses, or open questions. If uncertain, omit the item.
 - Ignore draft assumptions/ambiguities unless they were explicitly resolved by user clarifications.
-- Synthesize all available input into a concise, instructive brief for the brainstorm stage.
+- Synthesize all available input into a concise, instructive brief that guides all stages.
 - The brief must be self-contained: avoid references like "as mentioned above" or relying on external context.
-- Write as actionable instructions the brainstorm stage can execute immediately.
+- Write as actionable instructions that any stage can execute immediately.
 
 Provide the intent brief now:"""
 
@@ -1194,20 +1193,25 @@ async def stage3_synthesize_final(
         for entry in contributions
     ])
 
-    chairman_prompt = f"""<system>You are the Council Chairman, the master synthesizer responsible for producing a TOP QUALITY final artifact.</system>
+    chairman_prompt = f"""<system>
+You are the final synthesis editor responsible for producing the best possible answer.
+Your job is to integrate all verified inputs into one coherent, user-ready artifact that fulfills the user's intent.
+Resolve conflicts with judgment and prioritize accuracy, completeness, and usefulness.
+</system>
 
 <mission>
-Synthesize all expert contributions into a definitive, world-class artifact that FULLY addresses the user's intent.
-You MUST follow BOTH the Synthesis Plan AND the Editorial Guidelines precisely.
-Maintain continuity with the previous conversation context if it exists.
+Deliver a response that fully addresses the user's intent with accuracy, depth, and clarity.
+Balance the Synthesis Plan and Editorial Guidelines with the actual context and evidence.
+Maintain continuity with prior final outputs if present.
 </mission>
 
+<inputs>
 <user_query>{user_query}</user_query>
 {context_section}
 
-<intent_analysis>
+<intent_brief>
 {intent_analysis}
-</intent_analysis>
+</intent_brief>
 
 <expert_contributions>
 {contributions_text}
@@ -1224,42 +1228,39 @@ Maintain continuity with the previous conversation context if it exists.
 <editorial_guidelines>
 {editorial_guidelines}
 </editorial_guidelines>
+</inputs>
 
-<chairman_mandate>
-You MUST:
-1. **Address ALL Missing Elements** from the synthesis plan
-2. **Fill ALL Reasoning Gaps** with rigorous analysis
-3. **Follow the Editorial Guidelines** for tone, voice, and style
-4. **Match the recommended structure** from the plan
-5. **Satisfy ALL Quality Checkpoints**
-6. **Meet the Quality Bar** defined in editorial guidelines
-7. **STRICTLY ADHERE TO VERIFICATION**: Use the <verification_report> to filter untrue claims and fix reasoning flaws. If a finding is 'Incorrect', exclude or correct it. If 'Needs Clarification', add the missing context. Do not hallucinate data.
-8. **INTEGRATE ALL EXPERTS**: Explicitly incorporate or reject EACH expert contribution based on the verification report and synthesis plan.
-</chairman_mandate>
+<chairman_guidance>
+1. Follow the Synthesis Plan as your primary structure, but adapt it when the context warrants a better organization.
+2. Honor the Editorial Guidelines for tone, voice, and format while keeping clarity and usefulness first.
+3. Use the Verification Report as a truth filter: correct or remove incorrect claims and add missing context when clarification is required.
+4. Integrate every expert contribution by incorporating, refining, or explicitly rejecting key points with justification.
+5. Resolve conflicts between experts and make final judgment calls when needed.
+6. Keep the output self-contained and directly actionable for the user.
+</chairman_guidance>
 
-<synthesis_protocol>
-1. **BLUF (Bottom Line Up Front)**: Start with a definitive 1-2 sentence answer.
-2. **Comprehensive Coverage**: Address every dimension of user intent.
-3. **Follow Editorial Voice**: Match the tone and style guidelines exactly.
-4. **Evidence-Based**: Support claims with reasoning and data.
-5. **Contribution Reconciliation**: Resolve conflicts between experts and explain tradeoffs when they matter.
-6. **Actionable Conclusion**: End with clear, specific next steps.
-</synthesis_protocol>
+<quality_bar>
+- Completeness: covers all material intent dimensions.
+- Accuracy: aligned to verification report.
+- Depth: meaningful insight, not surface summary.
+- Coherence: one unified voice.
+- Actionability: user can proceed immediately.
+</quality_bar>
 
-<quality_standards>
-- **Completeness**: User intent must be FULLY addressed
-- **Accuracy**: All claims must be verified and correct
-- **Depth**: Provide real insight, not surface-level responses
-- **Coherence**: One unified voice, not a patchwork of opinions
-- **Actionability**: User must be able to act on this immediately
-- **Style Match**: Must match Editorial Guidelines perfectly
-</quality_standards>
-
-Provide the final TOP QUALITY synthesized artifact now:"""
+<output>
+Return the final artifact in the editorial format that best matches the user's intent and context.
+Do not include meta-commentary about the process.
+</output>"""
 
     messages = [
-        {"role": "system", "content": "You are the master synthesizer. Follow both the synthesis plan AND editorial guidelines precisely."},
-        {"role": "user", "content": chairman_prompt}
+        {
+            "role": "system",
+            "content": (
+                "You are the final synthesis editor responsible for producing the best possible answer. "
+                "Integrate all verified inputs into one coherent, user-ready artifact that fulfills the user's intent."
+            ),
+        },
+        {"role": "user", "content": chairman_prompt},
     ]
     chairman = chairman_model or CHAIRMAN_MODEL
     response = await query_model(chairman, messages)
