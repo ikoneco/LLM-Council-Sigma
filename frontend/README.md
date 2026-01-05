@@ -24,3 +24,4 @@ The app runs on `http://localhost:5173` and expects the backend at `http://local
 - New threads start with no preselected models; users choose a chairman + experts.
 - Per-model “thinking” toggles are available for supported models.
 - Streaming responses are handled in `src/api.js`.
+- Verification output can include a `Search Status` header when web evidence is unavailable.

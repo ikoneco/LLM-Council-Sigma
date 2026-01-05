@@ -188,7 +188,7 @@ Continue a message after clarifications (or skip) and run the full pipeline.
   - `contributions_start`: Sequence begins
   - `expert_start` / `expert_complete`: Individual expert contributions (Contains `expert` details and `contribution` text)
   - `contributions_complete`: Review finished
-  - `verification_start` / `verification_complete`: Fact-checking verification
+  - `verification_start` / `verification_complete`: Fact-checking verification (response includes optional `## Search Status` and the `## Verification & Reasoning Audit` section only)
   - `planning_start` / `planning_complete`: Synthesis plan creation
   - `editorial_start` / `editorial_complete`: Editorial guidelines creation
   - `stage3_start` / `stage3_complete`: Final synthesis artifact regeneration

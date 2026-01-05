@@ -23,6 +23,7 @@ We welcome contributions to correct bugs, improve prompts, or add new models! Be
 
 1. **Test Full Flow**: Before submitting, run a complete query aimed at checking all stages (Model Selection, Intent Analysis, Brainstorm, Contributions, Verification, Planning, Editorial, Synthesis).
 2. **Check Prompts**: If you modify prompts, please verify that the output format remains valid JSON where expected. The backend currently uses regex to extract JSON, which can be fragile if models deviate.
+   - Verification output is trimmed based on the `## Verification & Reasoning Audit` heading; keep that heading intact if you edit verification prompts.
 3. **Keep it Simple**: We prefer monolithic simplicity over microservices complexity for this project.
 
 ## Adding New Models

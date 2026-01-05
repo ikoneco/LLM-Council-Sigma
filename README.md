@@ -10,7 +10,7 @@
 - **Dynamic Expert Selection**: Automatically identifies the specialized roles needed (e.g., "Senior Product Strategist", "Security Architect") based on the query.
 - **Intent Clarification Loop**: Draft intent understanding + 3–6 high-impact questions (skippable) before the pipeline runs.
 - **Sequential Collaboration**: Experts build upon each other's work, providing deep, layered insights.
-- **Verification & Reasoning Audit**: A dedicated stage checks claims, logic, gaps, and inconsistencies.
+- **Verification & Reasoning Audit**: A dedicated stage checks claims, logic, gaps, and inconsistencies using web search when available (query count scales 3-8) with a visible Search Status note if evidence is missing.
 - **Editorial Synthesis**: A final "Chairman" synthesizes all contributions into a cohesive, style-calibrated response (Editorial/Council voice).
 - **Context-Aware Continuation**: Continue a thread using prior Chairman outputs as the baseline context, or start a fresh thread.
 - **Google-Quality UX**: A clean, elegant, and accessible interface featuring:
@@ -25,7 +25,7 @@
 2. **✅ Brainstorm Intent Brief**: A concise brief (no assumptions) guides expert brainstorming.
 3. **🧠 Expert Brainstorm**: Multiple models propose the ideal team of experts.
 4. **👥 Sequential Contributions**: Selected experts (simulated by LLMs) contribute linearly, reviewing and building on prior work.
-5. **🔬 Verification & Reasoning Audit**: A "Meticulous Fact-Checker" validates claims and reasoning.
+5. **🔬 Verification & Reasoning Audit**: A "Meticulous Fact-Checker" validates claims and reasoning using web search when available; output is limited to Search Status + Verification & Reasoning Audit.
 6. **📋 Synthesis Planning**: A "Synthesis Architect" outlines the structure for the final answer.
 7. **✍️ Editorial Guidelines**: An "Editorial Director" defines the voice, tone, and formatting.
 8. **🏆 Final Synthesis**: The Chairman produces the final response, integrating all insights.

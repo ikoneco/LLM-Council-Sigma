@@ -99,7 +99,9 @@ All orchestration logic resides in `backend/council.py`.
 
 - **Process**: Meticulous fact-checker + reasoning auditor reviews critical claims and logic across contributions.
 - **Model**: Runs on the user-selected Chairman model; web search (if triggered) uses `openai/gpt-4o-mini-search-preview`.
-- **Output**: Factual corrections plus reasoning issues (gaps, inconsistencies, logical flaws, assumptions).
+- **Search Scope**: Builds an exhaustive verification scope from contributions (used only to generate search targets).
+- **Search Query Count**: Scales with scope size (min 3, max 8) to cover critical risk areas.
+- **Output**: Only `## Search Status` (optional) + `## Verification & Reasoning Audit` are returned.
 
 ### 6. Synthesis Planning (`stage_synthesis_planning`)
 
@@ -156,6 +158,13 @@ The model responsible for synthesis tasks (Planning, Team Selection, Final Outpu
 
 - **Capability Map**: `THINKING_SUPPORTED_MODELS` in `backend/config.py` enumerates models that accept reasoning payloads.
 - **Selection**: Frontend enables a per-model “thinking” toggle for supported models only.
+
+### Verification Search
+
+- **Model**: `SEARCH_MODEL = "openai/gpt-4o-mini-search-preview"`
+- **Query Count**: `SEARCH_QUERY_COUNT` (min) and `SEARCH_QUERY_MAX` (cap, 8) determine dynamic query volume.
+- **Sources per Query**: `SEARCH_MAX_SOURCES` controls citation count returned per query.
+- **Context Size**: `SEARCH_CONTEXT_SIZE = "high"` passed to OpenRouter `web_search_options`.
 
 ---
 

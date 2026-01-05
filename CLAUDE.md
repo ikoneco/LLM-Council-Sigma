@@ -31,7 +31,7 @@ LLM Council is a multi-stage sequential collaboration system where multiple LLMs
 - `stage0_finalize_intent()`: Final intent brief after clarifications or skip
 - `stage_brainstorm_experts()`: All selected expert models brainstorm; chairman synthesizes final expert team
 - `stage1_sequential_contributions()`: Experts contribute sequentially with quality reviews
-- `stage_verification()`: Fact-checking + reasoning audit (chairman model; web search uses `openai/gpt-4o-mini-search-preview`)
+- `stage_verification()`: Fact-checking + reasoning audit (chairman model; web search uses `openai/gpt-4o-mini-search-preview` with dynamic query count 3-8; output trimmed to Search Status + Verification & Reasoning Audit)
 - `stage_synthesis_planning()`: Creates a structured synthesis plan (chairman model)
 - `stage_editorial_guidelines()`: Defines tone and formatting rules (chairman model)
 - `stage3_synthesize_final()`: Chairman synthesizes final response
