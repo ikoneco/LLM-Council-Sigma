@@ -10,6 +10,7 @@ from .config import (
     CHAIRMAN_MODEL,
     DEFAULT_NUM_EXPERTS,
     SEARCH_QUERY_COUNT,
+    SEARCH_QUERY_MAX,
     SEARCH_MAX_SOURCES,
 )
 
@@ -148,6 +149,74 @@ def _extract_citations(annotations: Any) -> List[Dict[str, str]]:
             "snippet": data.get("snippet") or "",
         })
     return citations
+
+
+def _trim_verification_report(text: str) -> str:
+    if not text:
+        return text
+    heading_pattern = re.compile(r"^##\s+", re.MULTILINE)
+    search_match = re.search(r"^##\s+Search Status", text, re.IGNORECASE | re.MULTILINE)
+    audit_match = re.search(r"^##\s+Verification\s*(?:&|and)\s*Reasoning\s+Audit", text, re.IGNORECASE | re.MULTILINE)
+
+    if not audit_match:
+        return text.strip()
+
+    def slice_section(start_index: int) -> str:
+        next_heading = None
+        for match in heading_pattern.finditer(text):
+            if match.start() > start_index:
+                next_heading = match.start()
+                break
+        if next_heading is None:
+            return text[start_index:].strip()
+        return text[start_index:next_heading].strip()
+
+    parts = []
+    if search_match and search_match.start() < audit_match.start():
+        search_section = slice_section(search_match.start())
+        if search_section:
+            parts.append(search_section)
+
+    audit_section = slice_section(audit_match.start())
+    if audit_section:
+        parts.append(audit_section)
+
+    return "\n\n".join(parts) if parts else text.strip()
+
+
+def _compute_search_query_count(scope_payload: Optional[Dict[str, Any]]) -> int:
+    base_count = SEARCH_QUERY_COUNT
+    if not isinstance(scope_payload, dict):
+        return base_count
+
+    items = set()
+    for key in [
+        "claims_to_verify",
+        "areas_of_concern",
+        "assumptions_to_check",
+        "entities_and_sources",
+        "critical_metrics",
+    ]:
+        values = scope_payload.get(key)
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            if not isinstance(value, str):
+                continue
+            normalized = value.strip()
+            if normalized:
+                items.add(normalized.lower())
+
+    scope_size = len(items)
+    if scope_size == 0:
+        return base_count
+
+    proposed = (scope_size + 5) // 6
+    if proposed < base_count:
+        proposed = base_count
+    if proposed > SEARCH_QUERY_MAX:
+        return SEARCH_QUERY_MAX
+    return proposed
 
 
 def _strip_uncertain_intent_fields(intent_draft: Any) -> Dict[str, Any]:
@@ -991,6 +1060,7 @@ async def stage_verification(
     search_status_notes = []
     search_scope = ""
     preferred_sources_global: List[str] = []
+    search_query_target_count = SEARCH_QUERY_COUNT
 
     # 1. Build an exhaustive verification scope (used ONLY for search targeting)
     scope_prompt = f"""<task>
@@ -1027,6 +1097,7 @@ Return JSON:
         )
         scope_payload = _extract_json(scope_response.get("content", "")) if scope_response else None
         if scope_payload:
+            search_query_target_count = _compute_search_query_count(scope_payload)
             preferred_sources = scope_payload.get("preferred_sources")
             if isinstance(preferred_sources, list):
                 preferred_sources_global = [item for item in preferred_sources if isinstance(item, str) and item.strip()]
@@ -1061,7 +1132,7 @@ Return JSON:
 
         query_gen_prompt = f"""<task>
 You are a Fact-Check Strategist dedicated to eliminating hallucinations and weak reasoning.
-Use the Verification Scope to select EXACTLY {SEARCH_QUERY_COUNT} high-risk verification targets.
+Use the Verification Scope to select EXACTLY {search_query_target_count} high-risk verification targets.
 Targets must collectively cover the MOST critical and failure-prone items without missing key risk areas.
 Prefer high-quality, authoritative sources. {sources_hint_global}
 </task>
@@ -1109,7 +1180,7 @@ Return ONLY a JSON array of objects:
     if search_targets:
         try:
             evidence_blocks = []
-            for target in search_targets[:SEARCH_QUERY_COUNT]:
+            for target in search_targets[:search_query_target_count]:
                 if not isinstance(target, dict):
                     continue
                 claim = target.get("claim", "").strip()
@@ -1258,7 +1329,7 @@ Provide your verification report now. Include both factual and reasoning issues:
     if search_status_notes:
         status_block = "## Search Status\n" + "\n".join(f"- {note}" for note in search_status_notes)
         verification_content = f"{status_block}\n\n{verification_content}"
-    return verification_content
+    return _trim_verification_report(verification_content)
 
 
 async def stage_synthesis_planning(
