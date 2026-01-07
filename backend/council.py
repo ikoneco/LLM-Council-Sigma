@@ -55,6 +55,71 @@ def build_default_experts(num_experts: int) -> List[Dict[str, Any]]:
     return base_experts + extras
 
 
+def _coerce_expert_order(value: Any, max_order: int) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        order = int(value)
+    except (TypeError, ValueError):
+        return None
+    if order < 1 or order > max_order:
+        return None
+    return order
+
+
+def _normalize_expert_team(
+    raw_experts: List[Dict[str, Any]],
+    num_experts: int,
+    default_experts: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    used_orders = set()
+    normalized: List[Dict[str, Any]] = []
+
+    for idx, expert in enumerate(raw_experts[:num_experts]):
+        role = expert.get("role") or expert.get("name") or expert.get("title") or f"Expert {idx + 1}"
+        task = expert.get("task") or expert.get("description") or expert.get("details") or "Contribute expertise"
+        objectives = expert.get("objectives", [])
+        if isinstance(objectives, str):
+            objectives_str = objectives
+        else:
+            objectives_str = " | ".join(objectives) if objectives else "Add value"
+
+        order_value = _coerce_expert_order(expert.get("order"), num_experts)
+        if order_value in used_orders:
+            order_value = None
+        if order_value is not None:
+            used_orders.add(order_value)
+
+        normalized.append({
+            "name": role,
+            "description": task,
+            "objectives": objectives_str,
+            "order": order_value,
+        })
+
+    remaining_orders = [order for order in range(1, num_experts + 1) if order not in used_orders]
+    for item in normalized:
+        if item.get("order") is None and remaining_orders:
+            item["order"] = remaining_orders.pop(0)
+
+    defaults_by_order = {expert.get("order"): expert for expert in default_experts if expert.get("order")}
+    for order in remaining_orders:
+        fallback = defaults_by_order.get(order)
+        if fallback:
+            normalized.append(fallback)
+        else:
+            normalized.append({
+                "name": f"Expert {order}",
+                "description": "Task: Provide complementary analysis. Objective: Strengthen coverage.",
+                "objectives": "Add complementary depth",
+                "order": order,
+            })
+
+    normalized = normalized[:num_experts]
+    normalized.sort(key=lambda item: item.get("order") or 999)
+    return normalized
+
+
 def format_conversation_history(history: List[Dict[str, Any]]) -> str:
     """Format previous conversation history for context handling."""
     if not history:
@@ -795,12 +860,23 @@ def _normalize_intent_draft(raw: Optional[Dict[str, Any]], user_query: str) -> D
         options = item.get("options") or []
         if not isinstance(options, list):
             options = []
-        if "Other / I'll type it" not in options:
-            options.append("Other / I'll type it")
+        cleaned_options = []
+        seen_options = set()
+        for option in options:
+            option_text = str(option).strip()
+            if not option_text:
+                continue
+            normalized_key = option_text.lower()
+            if normalized_key in seen_options:
+                continue
+            cleaned_options.append(option_text)
+            seen_options.add(normalized_key)
+        if "other / i'll type it" not in seen_options:
+            cleaned_options.append("Other / I'll type it")
         normalized_questions.append({
             "id": q_id,
             "question": question_text.strip() or f"Clarification {idx}",
-            "options": options[:6],
+            "options": cleaned_options[:6],
         })
 
     fallback_questions = _build_fallback_questions(user_query, draft if isinstance(draft, dict) else None)
@@ -1578,14 +1654,17 @@ Create a team of {num_experts} HIGHLY RELEVANT experts with SPECIFIC roles align
    - A DETAILED task description (50+ words explaining what they will do)
    - CLEAR objectives (2-3 measurable goals)
 3. Ensure COMPLEMENTARY coverage - each expert addresses a DIFFERENT dimension
-4. Order strategically: Foundation builders first, quality reviewers last
-5. Draw from the BEST suggestions across all models
+4. Order for synergy and progressive quality: early experts establish framing and assumptions, middle experts deepen and stress-test, final experts integrate, validate, and polish
+5. The order MUST be a strict 1..{num_experts} sequence with no duplicates or gaps
+6. Draw from the BEST suggestions across all models
+7. Provide a brief sequence rationale explaining why this order maximizes synergy and avoids early lock-in
 </team_formation_requirements>
 
 <output_format>
 Respond with a valid JSON object ONLY:
 {{
     "team_rationale": "2-3 sentences explaining why this specific team was chosen for this query",
+    "sequence_rationale": "2-3 sentences explaining why the order maximizes synergy and progressive quality",
     "experts": [
         {{
             "role": "Specific Professional Title",
@@ -1635,31 +1714,17 @@ Create the optimal expert team now:"""
             
             experts = data.get("experts", [])
             rationale = data.get("team_rationale", "")
-            
-            normalized = []
-            for i, e in enumerate(experts[:num_experts]):
-                # Be flexible with key names
-                role = e.get("role") or e.get("name") or e.get("title") or f"Expert {i+1}"
-                task = e.get("task") or e.get("description") or e.get("details") or "Contribute expertise"
-                objectives = e.get("objectives", [])
-                if isinstance(objectives, str):
-                    objectives_str = objectives
-                else:
-                    objectives_str = " | ".join(objectives) if objectives else "Add value"
-                
-                normalized.append({
-                    "name": role,
-                    "description": task,
-                    "objectives": objectives_str,
-                    "order": e.get("order", i + 1)
-                })
-            
-            while len(normalized) < num_experts:
-                normalized.append(default_experts[len(normalized)])
+            sequence_rationale = data.get("sequence_rationale", "")
+
+            normalized = _normalize_expert_team(experts, num_experts, default_experts)
             
             # Append team rationale to brainstorm display
-            if rationale:
-                brainstorm_display += f"\n\n---\n\n## 👔 Chairman's Team Selection\n\n{rationale}"
+            if rationale or sequence_rationale:
+                brainstorm_display += "\n\n---\n\n## 👔 Chairman's Team Selection\n\n"
+                if rationale:
+                    brainstorm_display += f"{rationale}\n\n"
+                if sequence_rationale:
+                    brainstorm_display += f"### Ordering Rationale\n\n{sequence_rationale}"
             
             return brainstorm_display, normalized
     except Exception as e:
@@ -1706,6 +1771,7 @@ Before adding your contribution, you MUST:
 3. **Detect Reasoning Errors**: Point out logical fallacies, gaps, or weak arguments.
 4. **Challenge Opportunities**: Question areas where the approach could be stronger.
 5. **Correct and Improve**: Fix any issues you found, then add your unique value.
+6. **Prevent Anchoring**: Challenge at least one earlier recommendation or framing to keep the thinking evolving.
 </quality_review_requirements>"""
     else:
         context_section = f"""<your_role>
@@ -1720,6 +1786,7 @@ As the first expert, you MUST:
 2. **Be Rigorous**: Avoid weak claims or unsupported assertions.
 3. **Set Clear Direction**: Provide a solid framework others can build on.
 4. **Anticipate Gaps**: Acknowledge areas that need further expertise.
+5. **Leave Room for Evolution**: Make it explicit where later experts should challenge or expand.
 </foundation_requirements>"""
     
     models = expert_models or COUNCIL_MODELS
@@ -1747,12 +1814,20 @@ Structure your response as follows:
 {"**## Quality Review**" if contributions else ""}
 {"- Flag any inaccuracies, assumptions, or reasoning errors in prior work" if contributions else ""}
 {"- Note areas of opportunity that need strengthening" if contributions else ""}
+{"- Explicitly challenge at least one earlier assumption or recommendation to avoid anchoring" if contributions else ""}
 
 **## My Contribution: {expert['name']}**
 - Add your unique value and expertise
 - Be specific, actionable, and evidence-based
 - Integrate with and enhance prior work
+- Introduce at least two NEW angles, frameworks, or considerations not covered yet
+- Anchor every point to the user's intent, goals, and success criteria
 - Target 250-400 words
+
+**## Evolution Note (Keep / Change / Add)**
+- Keep: ...
+- Change: ...
+- Add: ...
 
 **## Key Assumptions** (if any)
 - State any assumptions you're making
@@ -1763,6 +1838,7 @@ Structure your response as follows:
 - **Depth**: Go beyond surface-level—provide real insight.
 - **Actionability**: The user should be able to act on this.
 - **Coherence**: Build a unified artifact, not disconnected pieces.
+- **Grounding**: Stay anchored to the user’s intent; avoid unrelated domains or unnecessary complexity.
 </quality_standards>
 
 Provide your rigorous expert contribution now:"""

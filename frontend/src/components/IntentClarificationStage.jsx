@@ -278,12 +278,15 @@ export default function IntentClarificationStage({
               Answer any that matter. You can also skip all questions to proceed.
             </div>
           </div>
+          {(questions || []).length === 0 && (
+            <div className="intent-empty">No clarification questions were generated for this request.</div>
+          )}
           {(questions || []).map((question) => (
             <div key={question.id} className="intent-question">
               <div className="intent-question-text">{question.question}</div>
               <div className="intent-options">
                 {(question.options || []).map((option) => (
-                  <label key={option} className="intent-option">
+                  <label key={`${question.id}-${option}`} className="intent-option">
                     <input
                       type="checkbox"
                       name={question.id}

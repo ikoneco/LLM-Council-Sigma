@@ -324,6 +324,16 @@ async def continue_message_stream(conversation_id: str, request: ContinueMessage
         "free_text": request.free_text or "",
         "skip": request.skip,
     }
+    question_lookup = {}
+    for item in pending_message.get("clarification_questions") or []:
+        if isinstance(item, dict) and item.get("id"):
+            question_lookup[item["id"]] = item
+    for answer in clarification_payload["answers"]:
+        question_meta = question_lookup.get(answer.get("question_id"))
+        if not question_meta:
+            continue
+        answer["question"] = question_meta.get("question") or question_meta.get("prompt") or ""
+        answer["options"] = question_meta.get("options") or []
 
     async def event_generator():
         try:

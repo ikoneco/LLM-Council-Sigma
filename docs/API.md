@@ -191,6 +191,7 @@ Continue a message after clarifications (or skip) and run the full pipeline.
   - `skip: true` bypasses clarifications and proceeds with best-effort intent analysis.
   - `selected_options` supports multi-select responses per question.
   - The pipeline always executes 6 experts; if fewer models are selected, models are reused round-robin.
+  - The backend enriches clarification answers with the original question text/options for downstream intent synthesis.
 
 - **Response**: `text/event-stream`
 

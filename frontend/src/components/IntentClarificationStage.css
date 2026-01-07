@@ -97,7 +97,7 @@
 
 .intent-option {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   font-size: 0.9rem;
   color: var(--color-text-sub);
@@ -105,6 +105,12 @@
 
 .intent-option input {
   accent-color: var(--color-primary);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.intent-option span {
+  line-height: 1.4;
 }
 
 .intent-other-input {
