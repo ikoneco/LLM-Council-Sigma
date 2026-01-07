@@ -124,6 +124,11 @@ export default function IntentClarificationStage({
   const displayMarkdown = typeof display?.markdown === 'string' && display.markdown.trim()
     ? display.markdown.trim()
     : '';
+  const cleanedMarkdown = useMemo(() => {
+    if (!displayMarkdown) return '';
+    const stripped = displayMarkdown.replace(/<[^>]+>/g, '').trim();
+    return stripped || '';
+  }, [displayMarkdown]);
 
   const latentHypotheses = normalizeList(draftIntent?.latent_intent_hypotheses);
   const ambiguities = normalizeList(draftIntent?.ambiguities);
@@ -161,8 +166,8 @@ export default function IntentClarificationStage({
     : 'Not specified yet';
 
   const intentMarkdown = useMemo(() => {
-    if (displayMarkdown) {
-      return displayMarkdown;
+    if (cleanedMarkdown) {
+      return cleanedMarkdown;
     }
     const toParagraph = (items) => {
       if (!items || items.length === 0) {
@@ -196,7 +201,7 @@ export default function IntentClarificationStage({
       '### Ambiguities and Areas to Clarify',
       decisionText,
     ].join('\n');
-  }, [displayMarkdown, reconstructedAsk, primaryAskLine, deepRead, decisionFocus, fallbackUnderstanding, assumptionItems, openItems]);
+  }, [cleanedMarkdown, reconstructedAsk, primaryAskLine, deepRead, decisionFocus, fallbackUnderstanding, assumptionItems, openItems]);
 
   const flattenText = (node) => {
     const parts = [];

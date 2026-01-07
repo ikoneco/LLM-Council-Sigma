@@ -98,7 +98,20 @@ class Conversation(BaseModel):
     messages: List[Dict[str, Any]]
 
 
-def _normalize_thinking_config(raw_value: Any) -> Optional[Any]:
+def _reasoning_mode_for_model(model: str) -> Optional[str]:
+    if model in REASONING_EFFORT_MODELS:
+        return "effort"
+    if model in REASONING_MAX_TOKENS_MODELS:
+        return "max_tokens"
+    if model in THINKING_SUPPORTED_MODELS:
+        return "enabled"
+    return None
+
+
+def _normalize_thinking_config(raw_value: Any, model: str) -> Optional[Any]:
+    mode = _reasoning_mode_for_model(model)
+    if mode is None:
+        return None
     if isinstance(raw_value, bool):
         return True if raw_value else None
     if isinstance(raw_value, dict):
@@ -106,13 +119,15 @@ def _normalize_thinking_config(raw_value: Any) -> Optional[Any]:
         if enabled is False:
             return None
         config: Dict[str, Any] = {}
-        effort = raw_value.get("effort")
-        if isinstance(effort, str) and effort in REASONING_EFFORT_LEVELS:
-            config["effort"] = effort
-        max_tokens = raw_value.get("max_tokens")
-        if isinstance(max_tokens, int):
-            max_tokens = max(REASONING_MAX_TOKENS_MIN, min(max_tokens, REASONING_MAX_TOKENS_MAX))
-            config["max_tokens"] = max_tokens
+        if mode == "effort":
+            effort = raw_value.get("effort")
+            if isinstance(effort, str) and effort in REASONING_EFFORT_LEVELS:
+                config["effort"] = effort
+        if mode == "max_tokens":
+            max_tokens = raw_value.get("max_tokens")
+            if isinstance(max_tokens, int):
+                max_tokens = max(REASONING_MAX_TOKENS_MIN, min(max_tokens, REASONING_MAX_TOKENS_MAX))
+                config["max_tokens"] = max_tokens
         exclude = raw_value.get("exclude")
         if isinstance(exclude, bool):
             config["exclude"] = exclude
@@ -160,9 +175,7 @@ def normalize_model_selection(selection: Optional[Any]) -> Tuple[str, List[str],
     raw_map = getattr(selection, "thinking_by_model", None)
     if isinstance(raw_map, dict):
         for model, raw_value in raw_map.items():
-            if model not in THINKING_SUPPORTED_MODELS:
-                continue
-            normalized = _normalize_thinking_config(raw_value)
+            normalized = _normalize_thinking_config(raw_value, model)
             if normalized is not None:
                 thinking_by_model[model] = normalized
     elif bool(getattr(selection, "thinking_enabled", False)):

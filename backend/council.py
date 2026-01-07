@@ -566,6 +566,19 @@ def _strip_code_fence(text: str) -> str:
         return fence_match.group(1).strip()
     return text.strip()
 
+def _strip_html(text: str) -> str:
+    if not text:
+        return ""
+    return re.sub(r"<[^>]+>", "", text)
+
+
+def _has_visible_text(text: str) -> bool:
+    if not text:
+        return False
+    cleaned = _strip_html(text)
+    cleaned = re.sub(r"[#>*`\\-_=\\s]+", " ", cleaned)
+    return bool(re.search(r"[A-Za-z0-9]", cleaned))
+
 
 def _safe_content(response: Optional[Dict[str, Any]]) -> Optional[str]:
     if not response or not isinstance(response, dict):
@@ -1409,6 +1422,11 @@ User input:
         raise RuntimeError(f"Intent display generation failed: {error_detail}")
 
     display_markdown = _strip_code_fence(display_content)
+    if display_markdown:
+        if _strip_html(display_markdown) != display_markdown:
+            display_markdown = _strip_html(display_markdown).strip()
+        if not _has_visible_text(display_markdown):
+            display_markdown = ""
 
     raw = parsed if isinstance(parsed, dict) else {}
     display_block = raw.get("display") if isinstance(raw, dict) else {}

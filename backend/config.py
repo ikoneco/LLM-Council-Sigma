@@ -51,6 +51,7 @@ THINKING_SUPPORTED_MODELS = {
     "openai/gpt-5.2",
     "xiaomi/mimo-v2-flash:free",
     "mistralai/devstral-2512:free",
+    "x-ai/grok-4.1-fast",
 }
 THINKING_EFFORT = "medium"
 THINKING_MAX_TOKENS = 2000
@@ -58,16 +59,11 @@ REASONING_EFFORT_LEVELS = ["minimal", "low", "medium", "high", "xhigh", "none"]
 REASONING_MAX_TOKENS_MIN = 256
 REASONING_MAX_TOKENS_MAX = 8000
 REASONING_EFFORT_MODELS = {
-    "minimax/minimax-m2.1",
-    "deepseek/deepseek-v3.2",
-    "qwen/qwen2.5-vl-72b-instruct",
-    "z-ai/glm-4.7",
-    "moonshotai/kimi-k2-0905",
     "openai/gpt-5.2",
-    "xiaomi/mimo-v2-flash:free",
-    "mistralai/devstral-2512:free",
+    "x-ai/grok-4.1-fast",
 }
 REASONING_MAX_TOKENS_MODELS = {
+    "qwen/qwen2.5-vl-72b-instruct",
 }
 
 # Selection rules

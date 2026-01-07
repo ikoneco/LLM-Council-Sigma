@@ -62,6 +62,13 @@ def build_reasoning_payload(model: str, thinking_by_model: Optional[Dict[str, An
     config = _extract_reasoning_config(model, thinking_by_model) or {}
     reasoning: Dict[str, Any] = {}
 
+    if model in REASONING_EFFORT_MODELS:
+        mode = "effort"
+    elif model in REASONING_MAX_TOKENS_MODELS:
+        mode = "max_tokens"
+    else:
+        mode = "enabled"
+
     exclude = config.get("exclude")
     if isinstance(exclude, bool):
         reasoning["exclude"] = exclude
@@ -70,22 +77,26 @@ def build_reasoning_payload(model: str, thinking_by_model: Optional[Dict[str, An
     user_max_tokens = config.get("max_tokens")
 
     if user_effort and user_max_tokens:
-        if model in REASONING_MAX_TOKENS_MODELS:
+        if mode == "max_tokens":
             user_effort = None
+        elif mode == "effort":
+            user_max_tokens = None
         else:
+            user_effort = None
             user_max_tokens = None
 
-    if user_effort:
-        reasoning["effort"] = user_effort
-    elif isinstance(user_max_tokens, int):
-        reasoning["max_tokens"] = user_max_tokens
-    else:
-        if model in REASONING_MAX_TOKENS_MODELS:
-            reasoning["max_tokens"] = THINKING_MAX_TOKENS
-        elif model in REASONING_EFFORT_MODELS:
-            reasoning["effort"] = THINKING_EFFORT
+    if mode == "effort":
+        if user_effort:
+            reasoning["effort"] = user_effort
         else:
-            reasoning["enabled"] = True
+            reasoning["effort"] = THINKING_EFFORT
+    elif mode == "max_tokens":
+        if isinstance(user_max_tokens, int):
+            reasoning["max_tokens"] = user_max_tokens
+        else:
+            reasoning["max_tokens"] = THINKING_MAX_TOKENS
+    else:
+        reasoning["enabled"] = True
 
     if not reasoning and config.get("exclude") is True:
         reasoning["enabled"] = True
