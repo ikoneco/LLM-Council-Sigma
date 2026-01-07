@@ -332,6 +332,18 @@
   border: 1px dashed var(--color-border);
 }
 
+.error-stage {
+  border: 1px solid var(--color-error);
+  background: var(--color-error-bg);
+}
+
+.error-message {
+  color: var(--color-error);
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
 .spinner {
   width: 20px;
   height: 20px;

@@ -1,7 +1,7 @@
 # LLM Council System Architecture
 
-**Version:** 2.2 (Sequential Expert Collaboration Model)
-**Date:** January 4, 2026
+**Version:** 2.3 (Sequential Expert Collaboration Model)
+**Date:** January 6, 2026
 
 ## 1. Project Overview
 
@@ -50,9 +50,10 @@ graph TD
         M7[Gemini 3 Flash Preview]
         M8[Mimo V2 Flash]
         M9[Devstral 2512]
+        M10[Grok 4.1 Fast]
     end
     
-    BE <-->|API Calls| M1 & M2 & M3 & M4 & M5 & M6 & M7 & M8 & M9
+    BE <-->|API Calls| M1 & M2 & M3 & M4 & M5 & M6 & M7 & M8 & M9 & M10
     BE -->|SSE Events| FE
     BE -->|Persistence| FS[JSON Storage]
 ```
@@ -73,8 +74,9 @@ All orchestration logic resides in `backend/council.py`.
 ### 1. Intent Draft + Clarification (`stage0_generate_intent_draft`)
 
 - **Input**: User query + optional conversation context.
-- **Goal**: Produce a draft intent model and 3–6 clarification questions.
+- **Goal**: Produce a draft intent model and 3–6 clarification questions (model chooses how many based on ambiguity).
 - **Output**: `intent_draft`, `intent_display`, and `clarification_questions` for the UI.
+  - `intent_display` now includes a refined request line, a narrative deep-read synthesis, and an "Ambiguities and Areas to Clarify" section with subheadings for easy scanning.
 
 ### 2. Brainstorm Intent Brief (`stage0_finalize_intent`)
 
@@ -129,7 +131,7 @@ Configuration is centralized in `backend/config.py`.
 
 ### Models (`COUNCIL_MODELS` and `AVAILABLE_MODELS`)
 
-The pool of models used for expert roles. Currently configured with 10 models:
+The pool of models used for expert roles. Currently configured with 11 models:
 
 1. `minimax/minimax-m2.1`
 2. `deepseek/deepseek-v3.2`
@@ -141,6 +143,7 @@ The pool of models used for expert roles. Currently configured with 10 models:
 8. `google/gemini-3-flash-preview`
 9. `xiaomi/mimo-v2-flash:free`
 10. `mistralai/devstral-2512:free`
+11. `x-ai/grok-4.1-fast`
 
 ### Chairman (`CHAIRMAN_MODEL`)
 
@@ -158,6 +161,7 @@ The model responsible for synthesis tasks (Planning, Team Selection, Final Outpu
 
 - **Capability Map**: `THINKING_SUPPORTED_MODELS` in `backend/config.py` enumerates models that accept reasoning payloads.
 - **Selection**: Frontend enables a per-model “thinking” toggle for supported models only.
+- **Controls**: For supported models, users can set reasoning effort or max-tokens (depending on model support) and optionally exclude reasoning tokens from the response.
 
 ### Verification Search
 

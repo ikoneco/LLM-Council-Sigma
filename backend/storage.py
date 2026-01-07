@@ -237,6 +237,7 @@ def add_assistant_message_intent_draft(
         raise ValueError(f"Conversation {conversation_id} not found")
 
     stored_draft = intent_draft.get("draft_intent") if isinstance(intent_draft, dict) else intent_draft
+    intent_debug = intent_draft.get("debug") if isinstance(intent_draft, dict) else None
 
     conversation["messages"].append({
         "role": "assistant",
@@ -244,6 +245,7 @@ def add_assistant_message_intent_draft(
         "intent_draft": stored_draft,
         "intent_display": intent_display,
         "clarification_questions": questions,
+        "intent_debug": intent_debug,
         "metadata": metadata or {},
     })
 

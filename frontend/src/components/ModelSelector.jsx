@@ -11,6 +11,7 @@ const MODEL_LABELS = {
   'google/gemini-3-flash-preview': 'gemini-3-flash',
   'xiaomi/mimo-v2-flash:free': 'xiaomi/mimo-v2-flash:free',
   'mistralai/devstral-2512:free': 'mistral/devstral-2512',
+  'x-ai/grok-4.1-fast': 'x-ai/grok-4.1-fast',
 };
 
 function formatModelLabel(model) {
@@ -24,14 +25,52 @@ export default function ModelSelector({
   minExpertModels,
   thinkingByModel,
   thinkingSupportedModels,
+  reasoningEffortModels,
+  reasoningMaxTokensModels,
+  reasoningEffortLevels,
+  reasoningMaxTokensMin,
+  reasoningMaxTokensMax,
+  defaultReasoningEffort,
+  defaultReasoningMaxTokens,
   onChange,
   disabled,
 }) {
   const selectedCount = expertModels.length;
   const isValid = selectedCount >= minExpertModels;
   const supportedSet = new Set(thinkingSupportedModels || []);
+  const effortSet = new Set(reasoningEffortModels || []);
+  const maxTokensSet = new Set(reasoningMaxTokensModels || []);
   const isThinkingSupported = (model) => (thinkingSupportedModels ? supportedSet.has(model) : true);
-  const isThinkingEnabled = (model) => Boolean(thinkingByModel?.[model]);
+  const isThinkingEnabled = (model) => {
+    const value = thinkingByModel?.[model];
+    if (!value) return false;
+    if (typeof value === 'object') {
+      return value.enabled !== false;
+    }
+    return Boolean(value);
+  };
+  const isMaxTokensModel = (model) => maxTokensSet.has(model);
+  const isEffortModel = (model) => {
+    if (effortSet.size) {
+      return effortSet.has(model);
+    }
+    return isThinkingSupported(model) && !isMaxTokensModel(model);
+  };
+  const getThinkingConfig = (model) => {
+    const value = thinkingByModel?.[model];
+    if (!value) return null;
+    if (typeof value === 'object') return value;
+    return { enabled: true };
+  };
+  const getDefaultConfig = (model) => {
+    if (isMaxTokensModel(model)) {
+      return { max_tokens: defaultReasoningMaxTokens || 2000 };
+    }
+    if (isEffortModel(model)) {
+      return { effort: defaultReasoningEffort || 'medium' };
+    }
+    return {};
+  };
   const selectedSupportedCount = [chairmanModel, ...expertModels]
     .filter((model, index, arr) => arr.indexOf(model) === index)
     .filter((model) => isThinkingSupported(model) && isThinkingEnabled(model)).length;
@@ -63,10 +102,21 @@ export default function ModelSelector({
   const handleThinkingToggle = (model, enabled) => {
     const next = { ...(thinkingByModel || {}) };
     if (enabled) {
-      next[model] = true;
+      next[model] = getThinkingConfig(model) || getDefaultConfig(model) || true;
     } else {
       delete next[model];
     }
+    onChange({
+      chairmanModel,
+      expertModels,
+      thinkingByModel: next,
+    });
+  };
+
+  const updateThinkingConfig = (model, updates) => {
+    const next = { ...(thinkingByModel || {}) };
+    const current = getThinkingConfig(model) || getDefaultConfig(model);
+    next[model] = { ...current, ...updates, enabled: true };
     onChange({
       chairmanModel,
       expertModels,
@@ -120,6 +170,59 @@ export default function ModelSelector({
               <span className="switch-label">Thinking</span>
             </label>
           </div>
+          <div className="model-selector-support">
+            {isThinkingSupported(chairmanModel)
+              ? 'Thinking available for the selected chairman.'
+              : 'Thinking not available for the selected chairman.'}
+          </div>
+          {isThinkingSupported(chairmanModel) && isThinkingEnabled(chairmanModel) && (
+            <div className="model-option-settings">
+              {isEffortModel(chairmanModel) && (
+                <label className="model-option-setting">
+                  <span>Effort</span>
+                  <select
+                    value={getThinkingConfig(chairmanModel)?.effort || defaultReasoningEffort || 'medium'}
+                    onChange={(event) => updateThinkingConfig(chairmanModel, { effort: event.target.value })}
+                    disabled={disabled}
+                  >
+                    {(reasoningEffortLevels || ['minimal', 'low', 'medium', 'high', 'xhigh']).map((level) => (
+                      <option key={level} value={level}>
+                        {level}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {isMaxTokensModel(chairmanModel) && (
+                <label className="model-option-setting">
+                  <span>Reasoning tokens</span>
+                  <input
+                    type="number"
+                    value={getThinkingConfig(chairmanModel)?.max_tokens || defaultReasoningMaxTokens || 2000}
+                    min={reasoningMaxTokensMin || 256}
+                    max={reasoningMaxTokensMax || 8000}
+                    step="256"
+                    onChange={(event) => {
+                      const value = Number(event.target.value);
+                      if (!Number.isNaN(value)) {
+                        updateThinkingConfig(chairmanModel, { max_tokens: value });
+                      }
+                    }}
+                    disabled={disabled}
+                  />
+                </label>
+              )}
+              <label className="model-option-setting checkbox">
+                <input
+                  type="checkbox"
+                  checked={Boolean(getThinkingConfig(chairmanModel)?.exclude)}
+                  onChange={(event) => updateThinkingConfig(chairmanModel, { exclude: event.target.checked })}
+                  disabled={disabled}
+                />
+                <span>Hide reasoning tokens</span>
+              </label>
+            </div>
+          )}
         </div>
 
         <div className="model-selector-section">
@@ -145,6 +248,9 @@ export default function ModelSelector({
                       disabled={disabled}
                     />
                     <span className="model-option-name">{formatModelLabel(model)}</span>
+                    <span className={`model-option-badge ${supported ? 'supported' : 'unsupported'}`}>
+                      {supported ? 'Thinking' : 'No thinking'}
+                    </span>
                   </label>
                   <div className="model-option-controls">
                     <label
@@ -169,9 +275,57 @@ export default function ModelSelector({
                       <span className="switch-label">Thinking</span>
                     </label>
                   </div>
+                  {checked && isThinkingSupported(model) && isThinkingEnabled(model) && (
+                    <div className="model-option-settings">
+                      {isEffortModel(model) && (
+                        <label className="model-option-setting">
+                          <span>Effort</span>
+                          <select
+                            value={getThinkingConfig(model)?.effort || defaultReasoningEffort || 'medium'}
+                            onChange={(event) => updateThinkingConfig(model, { effort: event.target.value })}
+                            disabled={disabled}
+                          >
+                            {(reasoningEffortLevels || ['minimal', 'low', 'medium', 'high', 'xhigh']).map((level) => (
+                              <option key={level} value={level}>
+                                {level}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                      {isMaxTokensModel(model) && (
+                        <label className="model-option-setting">
+                          <span>Reasoning tokens</span>
+                          <input
+                            type="number"
+                            value={getThinkingConfig(model)?.max_tokens || defaultReasoningMaxTokens || 2000}
+                            min={reasoningMaxTokensMin || 256}
+                            max={reasoningMaxTokensMax || 8000}
+                            step="256"
+                            onChange={(event) => {
+                              const value = Number(event.target.value);
+                              if (!Number.isNaN(value)) {
+                                updateThinkingConfig(model, { max_tokens: value });
+                              }
+                            }}
+                            disabled={disabled}
+                          />
+                        </label>
+                      )}
+                      <label className="model-option-setting checkbox">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(getThinkingConfig(model)?.exclude)}
+                          onChange={(event) => updateThinkingConfig(model, { exclude: event.target.checked })}
+                          disabled={disabled}
+                        />
+                        <span>Hide reasoning tokens</span>
+                      </label>
+                    </div>
+                  )}
                 </div>
-              );
-            })}
+            );
+          })}
           </div>
           {!isValid && minExpertModels > 0 && (
             <div className="model-selector-hint error">

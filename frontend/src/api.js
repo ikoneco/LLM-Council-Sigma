@@ -152,6 +152,7 @@ export const api = {
         }
       }
     }
+    onEvent('complete', { type: 'complete' });
   },
 
   /**
@@ -205,5 +206,6 @@ export const api = {
         }
       }
     }
+    onEvent('complete', { type: 'complete' });
   },
 };

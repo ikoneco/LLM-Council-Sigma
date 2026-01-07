@@ -9,6 +9,7 @@ from .config import (
     COUNCIL_MODELS,
     CHAIRMAN_MODEL,
     DEFAULT_NUM_EXPERTS,
+    INTENT_MODEL_FALLBACKS,
     SEARCH_QUERY_COUNT,
     SEARCH_QUERY_MAX,
     SEARCH_MAX_SOURCES,
@@ -100,19 +101,45 @@ def format_conversation_history(history: List[Dict[str, Any]]) -> str:
 def _extract_json(text: str) -> Optional[Dict[str, Any]]:
     if not text:
         return None
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
-        return None
-    payload = match.group()
     try:
-        return json.loads(payload)
+        return json.loads(text)
     except json.JSONDecodeError:
-        cleaned = re.sub(r",\s*\}", "}", payload)
-        cleaned = re.sub(r",\s*\]", "]", cleaned)
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            return None
+        pass
+
+    start = text.find("{")
+    if start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escape = False
+    for idx in range(start, len(text)):
+        char = text[idx]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+            continue
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                payload = text[start:idx + 1]
+                for candidate in (payload, re.sub(r",\s*\}", "}", payload), re.sub(r",\s*\]", "]", payload)):
+                    try:
+                        return json.loads(candidate)
+                    except json.JSONDecodeError:
+                        continue
+                return None
+    return None
 
 
 def _extract_json_array(text: str) -> Optional[List[Any]]:
@@ -232,70 +259,507 @@ def _strip_uncertain_intent_fields(intent_draft: Any) -> Dict[str, Any]:
     return base
 
 
-def _build_fallback_questions() -> List[Dict[str, Any]]:
-    return [
-        {
-            "id": "q1",
-            "question": "What should the result enable you to do? (Select all that apply)",
-            "options": [
-                "Decide between options",
-                "Execute a plan",
-                "Communicate to stakeholders",
-                "Learn/understand a topic",
-                "Produce a draft or outline",
-                "Other / I'll type it",
+def _build_fallback_questions(
+    user_query: str = "",
+    draft_intent: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    lowered = user_query.lower()
+    audience = ""
+    deliverable = {}
+    explicit_constraints = []
+    goal_outcome = ""
+    task_type = ""
+    if isinstance(draft_intent, dict):
+        audience = str(draft_intent.get("audience") or "").strip()
+        deliverable = draft_intent.get("deliverable") or {}
+        explicit_constraints = draft_intent.get("explicit_constraints") or []
+        goal_outcome = str(draft_intent.get("goal_outcome") or draft_intent.get("primary_intent") or "").strip()
+        task_type = str(draft_intent.get("task_type") or "").strip()
+
+    has_series = "series" in lowered or "episode" in lowered
+    has_audience = bool(audience) or "audience" in lowered
+    has_format = any(term in lowered for term in ["outline", "synopsis", "summary", "table", "list", "plan", "draft"])
+    has_depth = any(term in lowered for term in ["detailed", "deep", "comprehensive", "brief", "quick"])
+    has_sources = any(term in lowered for term in ["source", "cite", "citation", "references"])
+    has_examples = any(term in lowered for term in ["example", "case study", "real-world", "grounded"])
+    has_substack = "substack" in lowered or "substak" in lowered
+    has_leadership = any(term in lowered for term in ["leader", "leadership", "executive", "director", "vp"])
+    wants_non_obvious = "not obvious" in lowered or "non-obvious" in lowered
+    topic_hint = _extract_first_match(
+        [r"(?:about|on|regarding)\s+([^.\n;]+)"],
+        user_query,
+    )
+
+    def short_phrase(text: str, max_words: int = 8) -> str:
+        words = re.findall(r"[A-Za-z0-9]+", text or "")
+        return " ".join(words[:max_words]).strip()
+
+    if not topic_hint:
+        topic_hint = short_phrase(goal_outcome) or short_phrase(user_query)
+
+    audience_hint = audience or "the intended audience"
+    deliverable_format = str(deliverable.get("format") or "").strip()
+    deliverable_hint = deliverable_format or "output"
+    topic_label = topic_hint or "the topic"
+
+    questions: List[Dict[str, Any]] = []
+
+    def add_question(question_id: str, question: str, options: List[str]) -> None:
+        if any(q["question"] == question for q in questions):
+            return
+        if "Other / I'll type it" not in options:
+            options.append("Other / I'll type it")
+        questions.append({
+            "id": question_id,
+            "question": question,
+            "options": options,
+        })
+
+    if has_series:
+        add_question(
+            "q1",
+            f"How should the series on {topic_label} be structured for {audience_hint}?",
+            [
+                "A cohesive narrative arc across all parts",
+                "Standalone essays with a shared theme",
+                "Hybrid: arc + standalone value",
             ],
-        },
-        {
-            "id": "q2",
-            "question": "Who is the intended audience?",
-            "options": [
-                "Me (individual use)",
-                "A cross-functional team",
-                "Executives/stakeholders",
-                "Customers/end-users",
-                "Other / I'll type it",
+        )
+
+    add_question(
+        "q2",
+        f"What should this {deliverable_hint} enable {audience_hint} to do about {topic_label}?",
+        [
+            "Make strategic decisions",
+            "Adopt specific practices or frameworks",
+            "Align stakeholders around a direction",
+            "Train or upskill a team",
+        ],
+    )
+
+    if not has_depth:
+        add_question(
+            "q3",
+            f"What depth is most useful for each {deliverable_hint} item?",
+            [
+                "Concise but substantive (2-4 paragraphs)",
+                "Detailed (5-8 paragraphs)",
+                "Deep-dive (full-length essay outline)",
             ],
-        },
-        {
-            "id": "q3",
-            "question": "What format should I produce?",
-            "options": [
-                "Step-by-step plan",
-                "Bullet summary",
-                "Table comparison",
-                "Draft document",
-                "Other / I'll type it",
+        )
+
+    if not has_audience:
+        add_question(
+            "q4",
+            "Who is the primary audience for this deliverable?",
+            [
+                "Senior product/design leaders",
+                "Product design practitioners",
+                "Cross-functional leadership teams",
+                "Founders/executives",
             ],
-        },
-        {
-            "id": "q4",
-            "question": "How deep or rigorous should this be?",
-            "options": [
-                "Quick overview",
-                "Standard depth",
-                "Deep and detailed (edge cases)",
-                "Other / I'll type it",
+        )
+
+    if not has_format:
+        add_question(
+            "q5",
+            f"What structure should each {deliverable_hint} item follow?",
+            [
+                "Title + thesis + detailed synopsis",
+                "Problem → insight → implications",
+                "Framework + examples + actions",
             ],
-        },
-        {
-            "id": "q5",
-            "question": "Any hard constraints I must follow? (Select all that apply)",
-            "options": [
-                "Use only what I provided",
-                "Include citations/sources",
-                "Timeboxed or short output",
-                "Avoid specific topics/approaches",
-                "Other / I'll type it",
+        )
+
+    if not has_sources:
+        add_question(
+            "q6",
+            f"How should the guidance be grounded for {audience_hint}?",
+            [
+                "Yes, include concrete examples and cases",
+                "Cite sources or evidence where claims are made",
+                "Prefer conceptual frameworks without examples",
+                "Mix: one example per item where relevant",
             ],
-        },
+        )
+
+    if has_substack:
+        add_question(
+            "q7",
+            f"What voice should the {deliverable_hint} use?",
+            [
+                "Thought-leadership essays (Substack-style)",
+                "Strategic internal memo tone",
+                "Teaching-style playbook with clear takeaways",
+            ],
+        )
+
+    if has_leadership:
+        add_question(
+            "q8",
+            "Which decision context matters most?",
+            [
+                "Strategic direction and prioritization",
+                "Org design and team capability",
+                "Product execution and delivery",
+                "Market positioning and differentiation",
+            ],
+        )
+
+    if wants_non_obvious or (explicit_constraints and any("avoid" in str(item).lower() for item in explicit_constraints)):
+        add_question(
+            "q9",
+            f"What should be explicitly avoided in this {deliverable_hint}?",
+            [
+                "Generic AI hype or trend summaries",
+                "Overly technical or engineering-heavy detail",
+                "Speculative futurecasting without business grounding",
+            ],
+        )
+
+    return questions[:6]
+
+
+def _human_join(items: List[str]) -> str:
+    items = [str(item).strip() for item in items if str(item).strip()]
+    if not items:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    if len(items) == 2:
+        return f"{items[0]} and {items[1]}"
+    return ", ".join(items[:-1]) + f", and {items[-1]}"
+
+
+def _normalize_text(text: str) -> str:
+    if not isinstance(text, str):
+        return ""
+    normalized = re.sub(r"[^a-z0-9\s]", " ", text.lower())
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return normalized
+
+
+def _token_set(text: str) -> set:
+    normalized = _normalize_text(text)
+    if not normalized:
+        return set()
+    return {token for token in normalized.split() if len(token) > 2}
+
+
+def _overlap_ratio(text: str, reference: str) -> float:
+    tokens_a = _token_set(text)
+    tokens_b = _token_set(reference)
+    if not tokens_a or not tokens_b:
+        return 0.0
+    return len(tokens_a & tokens_b) / len(tokens_a | tokens_b)
+
+
+def _is_near_duplicate(text: str, reference: str) -> bool:
+    if not text or not reference:
+        return False
+    normalized_text = _normalize_text(text)
+    normalized_ref = _normalize_text(reference)
+    if not normalized_text or not normalized_ref:
+        return False
+    if normalized_text in normalized_ref or normalized_ref in normalized_text:
+        return True
+    return _overlap_ratio(text, reference) >= 0.78
+
+
+def _is_verbatim_like(text: str, reference: str) -> bool:
+    if not text or not reference:
+        return False
+    normalized_text = _normalize_text(text)
+    normalized_ref = _normalize_text(reference)
+    if not normalized_text or not normalized_ref:
+        return False
+    len_ratio = len(normalized_text) / max(len(normalized_ref), 1)
+    if normalized_text in normalized_ref or normalized_ref in normalized_text:
+        return 0.7 <= len_ratio <= 1.3
+    return _overlap_ratio(text, reference) >= 0.9 and 0.8 <= len_ratio <= 1.4
+
+
+def _format_deliverable_phrase(deliverable: Dict[str, Any]) -> str:
+    if not isinstance(deliverable, dict):
+        return "a response"
+    depth = str(deliverable.get("depth") or "").strip()
+    fmt = str(deliverable.get("format") or "").strip()
+    if depth and fmt:
+        return f"a {depth} {fmt}"
+    if fmt:
+        return f"a {fmt}"
+    if depth:
+        return f"a {depth} response"
+    return "a response"
+
+
+def _strip_code_fence(text: str) -> str:
+    if not text:
+        return ""
+    fence_match = re.match(r"^```[a-zA-Z0-9_-]*\n(.+?)\n```$", text.strip(), re.S)
+    if fence_match:
+        return fence_match.group(1).strip()
+    return text.strip()
+
+
+def _safe_content(response: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not response or not isinstance(response, dict):
+        return None
+    content = response.get("content")
+    if not content or not isinstance(content, str):
+        return None
+    return content
+
+
+def _intent_model_candidates(primary_model: Optional[str]) -> List[str]:
+    seen = set()
+    ordered = []
+    seed_models = []
+    if primary_model in INTENT_MODEL_FALLBACKS:
+        seed_models.append(primary_model)
+    seed_models.extend(INTENT_MODEL_FALLBACKS)
+    for model in seed_models:
+        if not model or model in seen:
+            continue
+        seen.add(model)
+        ordered.append(model)
+    return ordered
+
+
+async def _repair_intent_json(
+    raw_text: str,
+    schema_json: str,
+    candidate_models: List[str],
+    thinking_by_model: Optional[Dict[str, bool]] = None,
+) -> Optional[Dict[str, Any]]:
+    if not raw_text:
+        return None
+    repair_system = (
+        "You are a JSON repair tool. "
+        "Return ONLY valid JSON that matches the provided schema. "
+        "Do not add commentary or markdown."
+    )
+    repair_prompt = (
+        "The following text should contain a JSON object but is malformed or non-compliant.\n"
+        "Fix it and return valid JSON only.\n\n"
+        "Schema:\n"
+        f"{schema_json}\n\n"
+        "Raw text:\n"
+        f"{raw_text}"
+    )
+    messages = [
+        {"role": "system", "content": repair_system},
+        {"role": "user", "content": repair_prompt},
     ]
+    for model in candidate_models:
+        response = await query_model(
+            model,
+            messages,
+            timeout=30.0,
+            extra_body={"max_tokens": 1200, "temperature": 0},
+        )
+        parsed = _extract_json(_safe_content(response) or "")
+        if parsed:
+            return parsed
+    return None
+
+
+def _extract_first_match(patterns: List[str], text: str) -> str:
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return re.sub(r"\s+", " ", match.group(1)).strip(" .;:\n")
+    return ""
+
+
+def _infer_series_count(text: str) -> str:
+    for match in re.finditer(r"\b(\d{1,2})\b", text):
+        value = int(match.group(1))
+        if 1 <= value <= 50:
+            return str(value)
+    return ""
+
+
+def _infer_deliverable(user_query: str) -> str:
+    lowered = user_query.lower()
+    if "synopsis" in lowered or "synopsys" in lowered:
+        return "a detailed synopsis"
+    if "summary" in lowered:
+        return "a clear summary"
+    if "outline" in lowered:
+        return "a structured outline"
+    if "plan" in lowered:
+        return "a structured plan"
+    if "table" in lowered:
+        return "a comparative table"
+    if "draft" in lowered:
+        return "a draft document"
+    if "list" in lowered:
+        return "a curated list"
+    return "a structured response"
+
+
+def _infer_quality_signals(user_query: str) -> List[str]:
+    lowered = user_query.lower()
+    mapping = [
+        ("detailed", "detailed and substantive"),
+        ("deep", "deep and thorough"),
+        ("non-obvious", "non-obvious and differentiated"),
+        ("not obvious", "non-obvious and differentiated"),
+        ("professional", "professional and polished"),
+        ("accessible", "accessible and clear"),
+        ("grounded", "grounded in real-world context"),
+        ("inspiring", "inspiring but credible"),
+        ("useful", "useful and actionable"),
+        ("informative", "informative and specific"),
+    ]
+    signals = []
+    for key, value in mapping:
+        if key in lowered and value not in signals:
+            signals.append(value)
+    return signals
+
+
+def _ambiguity_heading_for(item: str) -> str:
+    lowered = item.lower()
+    if any(term in lowered for term in ["scope", "breadth", "boundary", "range"]):
+        return "#### Scope & Boundaries"
+    if any(term in lowered for term in ["depth", "detail", "level", "granularity"]):
+        return "#### Depth & Detail"
+    if any(term in lowered for term in ["audience", "reader", "stakeholder"]):
+        return "#### Audience Fit"
+    if any(term in lowered for term in ["format", "structure", "outline", "series", "chapter"]):
+        return "#### Structure & Format"
+    if any(term in lowered for term in ["example", "evidence", "source", "citation", "grounding"]):
+        return "#### Evidence & Examples"
+    if any(term in lowered for term in ["tone", "voice", "style"]):
+        return "#### Voice & Tone"
+    return "#### Clarification"
+
+
+def _format_ambiguities_section(items: List[str]) -> str:
+    items = [item.strip().rstrip(".") for item in items if item and str(item).strip()]
+    if not items:
+        return ""
+    lines = []
+    used_headings = set()
+    for item in items[:3]:
+        heading = _ambiguity_heading_for(item)
+        if heading in used_headings:
+            heading = "#### Additional Clarification"
+        used_headings.add(heading)
+        sentence = (
+            f"Clarify {item} so the output can be tuned for the right level of specificity and usefulness."
+        )
+        lines.extend([heading, sentence, ""])
+    return "\n".join(lines).strip()
+
+
+def _build_display_from_query(user_query: str) -> Dict[str, Any]:
+    lowered = user_query.lower()
+    audience = _extract_first_match(
+        [
+            r"audience(?:\s+will\s+be|\s+is|:)\s*([^.\n;]+)",
+            r"for\s+([^.\n;]+)",
+        ],
+        user_query,
+    )
+    topic = _extract_first_match(
+        [r"(?:about|on|regarding)\s+([^.\n;]+)"],
+        user_query,
+    )
+    count = _infer_series_count(user_query)
+    deliverable = _infer_deliverable(user_query)
+    quality_signals = _infer_quality_signals(user_query)
+    quality_text = ", ".join(quality_signals) if quality_signals else "clear, high-value, and decision-ready"
+    platform = "Substack" if "substack" in lowered or "substak" in lowered else ""
+    year_marker = "2026" if "2026" in lowered else ""
+    voice_hint = "from a product design leader's perspective" if "product design leader" in lowered else ""
+    avoid_generic = "avoid generic or obvious points" if "not obvious" in lowered or "non-obvious" in lowered else ""
+
+    deliverable_phrase = deliverable
+    if count and "series" in lowered:
+        deliverable_phrase = f"a {count}-part series outline"
+    topic_phrase = topic or "the stated topic"
+    audience_phrase = audience or "the intended audience"
+    platform_phrase = "designed for Substack publication" if platform else ""
+    time_phrase = "grounded in 2026 business reality" if year_marker else ""
+    context_bits = [item for item in [platform_phrase, time_phrase] if item]
+    context_phrase = f"{', '.join(context_bits)}" if context_bits else ""
+    voice_phrase = f"written {voice_hint}" if voice_hint else ""
+    context_clauses = ", ".join([item for item in [context_phrase, voice_phrase] if item])
+    context_clause = f", {context_clauses}" if context_clauses else ""
+
+    reconstructed = (
+        f"Create {deliverable_phrase} on {topic_phrase} tailored for {audience_phrase}. "
+        f"It should be {quality_text}{context_clause}, reflecting the user's stated priorities."
+    )
+
+    paragraph_one = (
+        f"You want {deliverable_phrase} that frames {topic_phrase} in a way that speaks directly to {audience_phrase}. "
+        f"Each item should feel like a distinct chapter in a coherent series, not a loose list of ideas{context_phrase}. "
+        "The underlying aim is to surface what is changing, why it matters now, and how design leaders should respond."
+    )
+    paragraph_two = (
+        f"Success depends on being {quality_text}. The output should read like it comes from an experienced leader, "
+        f"offering practical insight with a clear point of view{', ' + voice_phrase if voice_phrase else ''}. "
+        "It should balance inspiration with grounded execution guidance, so the reader can apply it immediately. "
+        f"{'It should ' + avoid_generic + '.' if avoid_generic else ''}"
+    ).strip()
+    paragraph_three = (
+        "This request implies a senior audience that values rigor, clarity, and strategic relevance. "
+        "The content should connect product design decisions to real business constraints and emerging realities, "
+        "while avoiding superficial trends or speculative hype. "
+        "The most important calibration is the balance between strategic narrative and concrete, usable detail."
+    )
+    deep_read = "\n\n".join([paragraph_one, paragraph_two, paragraph_three])
+
+    unclear_items = [
+        "Preferred depth per item versus breadth across topics",
+        "Whether the output should read as publish-ready copy or a strategic outline",
+    ]
+    decision_focus = _format_ambiguities_section(unclear_items)
+
+    return {
+        "reconstructed_ask": reconstructed,
+        "deep_read": deep_read,
+        "decision_focus": decision_focus,
+        "understanding": [
+            f"Primary objective: deliver {deliverable_phrase} on {topic_phrase}.",
+            f"Audience focus: {audience_phrase}.",
+            f"Quality bar: {quality_text}.",
+        ],
+        "assumptions": [
+            "The user expects an output that can be used without major rewriting (why it matters: it drives structure and completeness).",
+            "The output should prioritize differentiated insights over generic coverage (why it matters: it changes depth and angle).",
+        ],
+        "unclear": unclear_items,
+    }
+
+
+def _display_payload_to_markdown(payload: Dict[str, Any]) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    ask = str(payload.get("reconstructed_ask") or "").strip()
+    deep_read = str(payload.get("deep_read") or "").strip()
+    decision_focus = str(payload.get("decision_focus") or "").strip()
+    if not any([ask, deep_read, decision_focus]):
+        return ""
+    sections = []
+    if ask:
+        sections.extend(["### Your Request, Refined", ask, ""])
+    if deep_read:
+        sections.extend(["### Deep Intent Read", deep_read, ""])
+    if decision_focus:
+        sections.extend(["### Ambiguities and Areas to Clarify", decision_focus])
+    return "\n".join(section for section in sections if section is not None).strip()
 
 
 def _normalize_intent_draft(raw: Optional[Dict[str, Any]], user_query: str) -> Dict[str, Any]:
-    fallback_questions = _build_fallback_questions()
 
     if not raw:
+        fallback_questions = _build_fallback_questions(user_query)
+        fallback_display = _build_display_from_query(user_query)
         return {
             "draft_intent": {
                 "primary_intent": user_query,
@@ -311,11 +775,7 @@ def _normalize_intent_draft(raw: Optional[Dict[str, Any]], user_query: str) -> D
                 "assumptions": [],
                 "confidence": "low",
             },
-            "display": {
-                "understanding": [user_query],
-                "assumptions": [],
-                "unclear": [],
-            },
+            "display": fallback_display,
             "questions": fallback_questions,
         }
 
@@ -343,15 +803,75 @@ def _normalize_intent_draft(raw: Optional[Dict[str, Any]], user_query: str) -> D
             "options": options[:6],
         })
 
+    fallback_questions = _build_fallback_questions(user_query, draft if isinstance(draft, dict) else None)
+
+    def is_generic_question(text: str) -> bool:
+        lowered_text = text.lower()
+        patterns = [
+            "any hard constraints",
+            "what format should i produce",
+            "who is the intended audience",
+            "how deep or rigorous",
+            "what should the result enable you to do",
+            "tell me more",
+            "anything else",
+        ]
+        return any(pattern in lowered_text for pattern in patterns)
+
+    query_tokens = _token_set(user_query)
+    context_bits = []
+    if isinstance(draft, dict):
+        if draft.get("audience"):
+            context_bits.append(str(draft.get("audience")))
+        deliverable_context = draft.get("deliverable") or {}
+        if isinstance(deliverable_context, dict):
+            for key in ("format", "structure"):
+                if deliverable_context.get(key):
+                    context_bits.append(str(deliverable_context.get(key)))
+        goal_hint = draft.get("goal_outcome") or draft.get("primary_intent") or ""
+        if goal_hint:
+            context_bits.append(str(goal_hint))
+    topic_hint = _extract_first_match([r"(?:about|on|regarding)\s+([^.\n;]+)"], user_query)
+    if topic_hint:
+        context_bits.append(topic_hint)
+    context_tokens = _token_set(" ".join(context_bits))
+
+    def question_score(text: str) -> int:
+        lowered_text = text.lower()
+        score = 0
+        if len(text.split()) >= 8:
+            score += 2
+        if query_tokens and len(set(lowered_text.split()) & query_tokens) >= 2:
+            score += 2
+        if context_tokens and len(set(lowered_text.split()) & context_tokens) >= 2:
+            score += 2
+        if any(term in lowered_text for term in ["series", "audience", "structure", "depth", "examples", "voice", "scope"]):
+            score += 1
+        if any(term in lowered_text for term in ["avoid", "exclude", "not", "must"]):
+            score += 1
+        if is_generic_question(text):
+            score -= 3
+        return score
+
+    ranked = sorted(
+        normalized_questions,
+        key=lambda q: question_score(q.get("question", "")),
+        reverse=True,
+    )
+    filtered = [q for q in ranked if question_score(q.get("question", "")) >= 2]
+    if len(filtered) < 2:
+        filtered = ranked[:2]
+
+    normalized_questions = filtered
+    existing_questions = {q["question"].lower() for q in normalized_questions}
     if len(normalized_questions) < 3:
-        needed = 3 - len(normalized_questions)
         for fallback in fallback_questions:
-            if needed <= 0:
+            if len(normalized_questions) >= 3:
                 break
-            if fallback["question"] in {q["question"] for q in normalized_questions}:
+            if fallback["question"].lower() in existing_questions:
                 continue
             normalized_questions.append(fallback)
-            needed -= 1
+            existing_questions.add(fallback["question"].lower())
 
     normalized_questions = normalized_questions[:6]
 
@@ -431,28 +951,161 @@ def _normalize_intent_draft(raw: Optional[Dict[str, Any]], user_query: str) -> D
     understanding = display.get("understanding") or []
     if not isinstance(understanding, list):
         understanding = []
-    if not understanding:
-        understanding = [draft_intent["primary_intent"]]
+    understanding = [str(item).strip() for item in understanding if str(item).strip()]
 
     assumptions_display = display.get("assumptions") or []
     if not isinstance(assumptions_display, list):
         assumptions_display = []
+    assumptions_display = [str(item).strip() for item in assumptions_display if str(item).strip()]
 
     unclear_display = display.get("unclear") or []
     if not isinstance(unclear_display, list):
         unclear_display = []
+    unclear_display = [str(item).strip() for item in unclear_display if str(item).strip()]
+
+    reconstructed_ask = display.get("reconstructed_ask") or ""
+    if not isinstance(reconstructed_ask, str):
+        reconstructed_ask = ""
+
+    deep_read = display.get("deep_read") or ""
+    if not isinstance(deep_read, str):
+        deep_read = ""
+
+    decision_focus = display.get("decision_focus") or ""
+    if not isinstance(decision_focus, str):
+        decision_focus = ""
+
+    display_markdown = display.get("markdown") or display.get("display_markdown") or ""
+    if not isinstance(display_markdown, str):
+        display_markdown = ""
 
     display_payload = {
+        "reconstructed_ask": reconstructed_ask.strip(),
         "understanding": understanding,
         "assumptions": assumptions_display,
         "unclear": unclear_display,
+        "deep_read": deep_read.strip(),
+        "decision_focus": decision_focus.strip(),
+        "markdown": display_markdown.strip(),
     }
+
+    def _filter_duplicates(items: List[str]) -> List[str]:
+        return [item for item in items if not _is_verbatim_like(item, user_query)]
+
+    display_payload["understanding"] = _filter_duplicates(display_payload["understanding"])
+    display_payload["assumptions"] = _filter_duplicates(display_payload["assumptions"])
+    display_payload["unclear"] = _filter_duplicates(display_payload["unclear"])
+    if _is_verbatim_like(display_payload["deep_read"], user_query):
+        display_payload["deep_read"] = ""
+    if _is_verbatim_like(display_payload["decision_focus"], user_query):
+        display_payload["decision_focus"] = ""
+    if _is_verbatim_like(display_payload["reconstructed_ask"], user_query):
+        display_payload["reconstructed_ask"] = ""
+
+    if not display_payload["reconstructed_ask"]:
+        audience_hint = f" for {draft_intent['audience']}" if draft_intent.get("audience") else ""
+        deliverable_phrase = _format_deliverable_phrase(deliverable)
+        success_hint = _human_join(success_criteria)
+        constraints_hint = _human_join(explicit_constraints)
+        goal_text = draft_intent.get("goal_outcome") or draft_intent["primary_intent"]
+        if _is_verbatim_like(goal_text, user_query) or not goal_text:
+            goal_text = "meets the user's objective"
+        reconstructed = f"Create {deliverable_phrase} that {goal_text}"
+        if audience_hint:
+            reconstructed += audience_hint
+        if success_hint:
+            reconstructed += f", optimized for {success_hint}"
+        if constraints_hint:
+            reconstructed += f", while honoring {constraints_hint}"
+        display_payload["reconstructed_ask"] = f"{reconstructed}."
+
+    if not display_payload["understanding"]:
+        core_ask = draft_intent.get("primary_intent") or ""
+        if _is_verbatim_like(core_ask, user_query) or not core_ask:
+            core_ask = "Deliver a response that achieves the user's stated objective."
+        understanding_items = [f"Core ask: {core_ask}"]
+        if draft_intent.get("audience"):
+            understanding_items.append(f"Audience focus: {draft_intent['audience']}.")
+        if deliverable.get("format") or deliverable.get("depth"):
+            understanding_items.append(f"Deliverable: {_format_deliverable_phrase(deliverable)}.")
+        if success_criteria:
+            understanding_items.append(f"Success criteria: {_human_join(success_criteria)}.")
+        if explicit_constraints:
+            understanding_items.append(f"Constraints to honor: {_human_join(explicit_constraints)}.")
+        if len(understanding_items) < 3:
+            understanding_items.append("The output should feel decision-ready and non-obvious, not generic.")
+        display_payload["understanding"] = understanding_items
+
+    if not display_payload["deep_read"]:
+        fallback_display = fallback_display if "fallback_display" in locals() else _build_display_from_query(user_query)
+        display_payload["deep_read"] = fallback_display["deep_read"]
+
+    def _build_decision_focus(unclear_items: List[str]) -> str:
+        return _format_ambiguities_section(unclear_items)
+
+    decision_focus_candidate = _build_decision_focus(display_payload.get("unclear", []))
+
+    if not display_payload["decision_focus"]:
+        if decision_focus_candidate:
+            display_payload["decision_focus"] = decision_focus_candidate
+        else:
+            fallback_display = fallback_display if "fallback_display" in locals() else _build_display_from_query(user_query)
+            display_payload["decision_focus"] = fallback_display["decision_focus"]
+
+    if _is_verbatim_like(display_payload["reconstructed_ask"], user_query):
+        display_payload["reconstructed_ask"] = ""
+    if not display_payload["reconstructed_ask"]:
+        fallback_display = _build_display_from_query(user_query)
+        display_payload["reconstructed_ask"] = fallback_display["reconstructed_ask"]
+
+    if display_payload["understanding"] and all(
+        _is_verbatim_like(item, user_query) for item in display_payload["understanding"]
+    ):
+        display_payload["understanding"] = []
+    if not display_payload["understanding"]:
+        fallback_display = fallback_display if "fallback_display" in locals() else _build_display_from_query(user_query)
+        display_payload["understanding"] = fallback_display.get("understanding", [])
+
+    if display_payload["assumptions"] and all(
+        _is_verbatim_like(item, user_query) for item in display_payload["assumptions"]
+    ):
+        display_payload["assumptions"] = []
+    if not display_payload["assumptions"]:
+        fallback_display = fallback_display if "fallback_display" in locals() else _build_display_from_query(user_query)
+        display_payload["assumptions"] = fallback_display["assumptions"]
+
+    if display_payload["unclear"] and all(
+        _is_verbatim_like(item, user_query) for item in display_payload["unclear"]
+    ):
+        display_payload["unclear"] = []
+    if not display_payload["unclear"]:
+        fallback_display = fallback_display if "fallback_display" in locals() else _build_display_from_query(user_query)
+        display_payload["unclear"] = fallback_display["unclear"]
+
+    if not display_payload["assumptions"]:
+        display_payload["assumptions"] = [
+            "The user wants a non-obvious, high-value result (why it matters: it changes rigor and originality).",
+            "The output should be ready to use without heavy editing (why it matters: it changes structure and completeness).",
+        ]
+
+    if not display_payload["unclear"]:
+        display_payload["unclear"] = [
+            "Preferred balance between breadth and depth for each item.",
+            "Whether the output should read as publish-ready copy or strategic briefing notes.",
+        ]
+
+    if not display_payload.get("markdown"):
+        display_payload["markdown"] = _display_payload_to_markdown(display_payload)
 
     return {
         "draft_intent": draft_intent,
         "display": display_payload,
         "questions": normalized_questions,
     }
+
+
+def build_intent_draft_fallback(user_query: str) -> Dict[str, Any]:
+    return _normalize_intent_draft(None, user_query)
 
 
 async def stage0_generate_intent_draft(
@@ -480,9 +1133,60 @@ async def stage0_generate_intent_draft(
         ],
     }
 
-    intent_prompt = f"""<system>You are an Intent Analyst + Clarification Designer.</system>
+    json_system_prompt = (
+        "You are an Intent Analyst + Clarification Designer. "
+        "Infer deeper intent, constraints, audience, and success criteria. "
+        "Make bold but defensible inferences and surface what the user is trying to avoid. "
+        "Never echo the user query verbatim; always rephrase with clearer, richer language. "
+        "Clarification questions must be context-specific, tied to actual ambiguities in THIS request. "
+        "Avoid generic questions that could fit any task. "
+        "Return JSON only."
+    )
 
-<task>
+    output_schema = {
+        "draft_intent": {
+            "primary_intent": "1 sentence",
+            "goal_outcome": "What success enables or produces",
+            "task_type": "explanation|recommendation|plan|critique|rewrite|research|extraction|troubleshooting",
+            "deliverable": {
+                "format": "bullets|table|steps|outline|doc|etc",
+                "depth": "quick|standard|deep",
+                "tone": "string or null",
+                "structure": "key sections or outline (optional)",
+                "required_elements": ["optional bullets"],
+            },
+            "audience": "string or null",
+            "constraints": {
+                "must": ["..."],
+                "should": ["..."],
+                "must_not": ["..."],
+            },
+            "quality_bar": {
+                "rigor": "quick|standard|deep",
+                "evidence": "none|light|strict",
+                "completeness": "core|standard|comprehensive",
+                "risk_tolerance": "low|medium|high",
+            },
+            "success_criteria": ["..."],
+            "explicit_constraints": ["..."],
+            "latent_intent_hypotheses": ["..."],
+            "ambiguities": ["..."],
+            "assumptions": [
+                {"assumption": "...", "risk": "high|medium|low", "why_it_matters": "..."}
+            ],
+            "confidence": "high|medium|low",
+        },
+        "questions": [
+            {
+                "id": "q1",
+                "question": "text",
+                "options": ["2-5 options", "Other / I'll type it"],
+            }
+        ],
+    }
+    output_schema_json = json.dumps(output_schema, indent=2)
+
+    intent_prompt = f"""<task>
 Turn the raw user request into a draft intent model and 3-6 high-impact clarification questions.
 Optimize for correctness. Go beyond surface-level by inferring likely motivations, context, audience, constraints, success criteria, dependencies, and risk tolerance.
 Separate explicit statements from inferred hypotheses and label uncertainty clearly.
@@ -500,77 +1204,152 @@ If there is conversation context, treat the most recent Chairman output as the b
 
 <output_format>
 Return a JSON object ONLY with this schema:
-{{
-  "draft_intent": {{
-    "primary_intent": "1 sentence",
-    "goal_outcome": "What success enables or produces",
-    "task_type": "explanation|recommendation|plan|critique|rewrite|research|extraction|troubleshooting",
-    "deliverable": {{
-      "format": "bullets|table|steps|outline|doc|etc",
-      "depth": "quick|standard|deep",
-      "tone": "string or null",
-      "structure": "key sections or outline (optional)",
-      "required_elements": ["optional bullets"]
-    }},
-    "audience": "string or null",
-    "constraints": {{
-      "must": ["..."],
-      "should": ["..."],
-      "must_not": ["..."]
-    }},
-    "quality_bar": {{
-      "rigor": "quick|standard|deep",
-      "evidence": "none|light|strict",
-      "completeness": "core|standard|comprehensive",
-      "risk_tolerance": "low|medium|high"
-    }},
-    "success_criteria": ["..."],
-    "explicit_constraints": ["..."],
-    "latent_intent_hypotheses": ["..."],
-    "ambiguities": ["..."],
-  "assumptions": [{{"assumption": "...", "risk": "high|medium|low", "why_it_matters": "..."}}],
-    "confidence": "high|medium|low"
-  }},
-  "display": {{
-    "understanding": ["2-4 short bullets in plain language"],
-    "assumptions": ["2-3 concise bullets that include why the assumption matters"],
-    "unclear": ["2-3 concise bullets of biggest open decisions"]
-  }},
-  "questions": [
-    {{
-      "id": "q1",
-      "question": "text",
-      "options": ["2-5 options", "Other / I'll type it"]
-    }}
-  ]
-}}
+{output_schema_json}
 </output_format>
 
 Rules:
-- Provide 3-6 questions.
+- Choose how many questions to ask within 3-6 based on ambiguity (clearer requests = fewer questions).
 - Each question addresses ONE dimension only.
 - Target the highest-impact uncertainties (goal/outcome, scope boundaries, audience, format, constraints, quality bar).
+- If the user already specified audience, format, depth, or constraints, do NOT ask about them unless there is a conflict or tradeoff.
+- Each question must reference the user's topic, audience, or deliverable so it feels tailored to this request.
 - Order ambiguities, assumptions, and questions by impact (highest first).
 - Options must be distinct and actionable. Multi-select is allowed when it helps (do not force exclusivity).
 - Avoid vague prompts; every option should imply a different execution path.
 - Always include "Other / I'll type it".
-- Keep the display output human-friendly and scannable; reserve depth for the draft_intent fields.
 
 Generate the JSON now:"""
 
-    messages = [{"role": "user", "content": intent_prompt}]
-    model_name = analysis_model or CHAIRMAN_MODEL
-    response = await query_model(
-        model_name,
-        messages,
-        extra_body=build_reasoning_payload(model_name, thinking_by_model),
+    display_system_prompt = (
+        "You are a Deep Intent Synthesizer. "
+        "Reconstruct the user's request into a clearer, richer version that surfaces implicit goals, constraints, and what they want to avoid. "
+        "Use the user's voice and intent, but do not copy their wording verbatim."
     )
 
-    if response is None:
-        return _normalize_intent_draft(None, user_query)
+    display_prompt = f"""Rewrite the request into markdown with this structure:
+### Your Request, Refined
+(1 paragraph)
 
-    parsed = _extract_json(response.get("content", ""))
-    return _normalize_intent_draft(parsed, user_query)
+Then choose 2-4 additional section headings that best organize the analysis for THIS request.
+Use H3 headings (###) and make them context-specific (e.g., “Audience & Decision Context”, “Scope & Boundaries”, “Evidence & Examples”, “Constraints & Quality Bar”).
+One of the headings MUST be:
+### Ambiguities and Areas to Clarify
+In that section, include 2-3 H4 subheadings (####) that group the uncertainties, and write one sentence under each (no bullets). Each sentence should state a specific low-confidence inference or gap the user can clarify.
+
+Rules:
+- No bullet lists anywhere.
+- Each heading is one paragraph only.
+- Choose the number of analysis headings based on complexity (2-4 total after the first section).
+- Make bold but defensible inferences; surface implicit goals, quality bar, and constraints.
+- Do not echo full sentences from the user query.
+- Do not provide solutions.
+
+User input:
+{user_query}
+{context_section}
+"""
+
+    json_messages = [
+        {"role": "system", "content": json_system_prompt},
+        {"role": "user", "content": intent_prompt},
+    ]
+    display_messages = [
+        {"role": "system", "content": display_system_prompt},
+        {"role": "user", "content": display_prompt},
+    ]
+    model_name = analysis_model or CHAIRMAN_MODEL
+
+    candidate_models = _intent_model_candidates(model_name)
+    intent_response = None
+    display_response = None
+    intent_model_used = None
+    display_model_used = None
+    attempt_log: List[Dict[str, Any]] = []
+    intent_errors: List[str] = []
+    display_errors: List[str] = []
+
+    for candidate in candidate_models:
+        if not intent_response or not intent_response.get("content"):
+            json_extra = {"max_tokens": 1200, "temperature": 0}
+            json_extra.update(build_reasoning_payload(candidate, thinking_by_model))
+            intent_response = await query_model(
+                candidate,
+                json_messages,
+                timeout=30.0,
+                extra_body=json_extra,
+            )
+            intent_ok = bool(intent_response and intent_response.get("content"))
+            intent_error = (
+                str(intent_response.get("error"))
+                if isinstance(intent_response, dict) and intent_response.get("error")
+                else None
+            )
+            attempt_log.append({
+                "model": candidate,
+                "intent_ok": intent_ok,
+                "intent_error": intent_error,
+            })
+            if intent_error:
+                intent_errors.append(f"{candidate}: {intent_error}")
+            if intent_response and intent_response.get("content"):
+                intent_model_used = candidate
+
+        if not display_response or not display_response.get("content"):
+            display_extra = {"max_tokens": 700, "temperature": 0.3}
+            display_extra.update(build_reasoning_payload(candidate, thinking_by_model))
+            display_response = await query_model(
+                candidate,
+                display_messages,
+                timeout=30.0,
+                extra_body=display_extra,
+            )
+            display_ok = bool(display_response and display_response.get("content"))
+            display_error = (
+                str(display_response.get("error"))
+                if isinstance(display_response, dict) and display_response.get("error")
+                else None
+            )
+            attempt_log[-1]["display_ok"] = display_ok
+            attempt_log[-1]["display_error"] = display_error
+            if display_error:
+                display_errors.append(f"{candidate}: {display_error}")
+            if display_response and display_response.get("content"):
+                display_model_used = candidate
+
+        if intent_response and intent_response.get("content") and display_response and display_response.get("content"):
+            break
+
+    intent_content = _safe_content(intent_response)
+    parsed = _extract_json(intent_content or "")
+    if not parsed and intent_content:
+        parsed = await _repair_intent_json(intent_content, output_schema_json, candidate_models, thinking_by_model)
+    if not parsed:
+        error_detail = "; ".join(intent_errors) if intent_errors else "no model returned JSON content"
+        raise RuntimeError(f"Intent draft JSON generation failed: {error_detail}")
+
+    display_content = _safe_content(display_response)
+    if not display_content:
+        error_detail = "; ".join(display_errors) if display_errors else "no model returned display content"
+        raise RuntimeError(f"Intent display generation failed: {error_detail}")
+
+    display_markdown = _strip_code_fence(display_content)
+
+    raw = parsed if isinstance(parsed, dict) else {}
+    display_block = raw.get("display") if isinstance(raw, dict) else {}
+    if not isinstance(display_block, dict):
+        display_block = {}
+    display_block["markdown"] = display_markdown
+    if isinstance(raw, dict):
+        raw["display"] = display_block
+
+    normalized = _normalize_intent_draft(raw if isinstance(raw, dict) else None, user_query)
+    normalized["debug"] = {
+        "requested_model": model_name,
+        "intent_model_used": intent_model_used,
+        "display_model_used": display_model_used,
+        "attempts": attempt_log,
+    }
+    return normalized
 
 
 async def stage0_finalize_intent(
@@ -681,7 +1460,7 @@ Provide the intent brief now:"""
         extra_body=build_reasoning_payload(model_name, thinking_by_model),
     )
 
-    if response is None:
+    if not _safe_content(response):
         return "Intent analysis unavailable."
 
     return response.get("content", "Intent analysis unavailable.")
@@ -766,7 +1545,7 @@ Provide your expert suggestions now:"""
     
     for i, resp in enumerate(responses):
         model_name = models[i].split('/')[-1]  # Get short model name
-        if isinstance(resp, Exception) or resp is None:
+        if isinstance(resp, Exception) or not _safe_content(resp):
             brainstorm_sections.append(f"### 🤖 {model_name}\n*Failed to respond*\n")
             continue
         content = resp.get('content', '')
@@ -836,7 +1615,7 @@ Create the optimal expert team now:"""
     
     default_experts = build_default_experts(num_experts)
     
-    if response is None:
+    if not _safe_content(response):
         return brainstorm_display, default_experts
     
     content = response.get('content', '')
@@ -995,7 +1774,7 @@ Provide your rigorous expert contribution now:"""
         extra_body=build_reasoning_payload(model, thinking_by_model),
     )
     
-    if response is None:
+    if not _safe_content(response):
         return "Expert contribution unavailable."
     
     return response.get('content', 'Expert contribution unavailable.')
@@ -1095,7 +1874,7 @@ Return JSON:
             [{"role": "user", "content": scope_prompt}],
             extra_body=build_reasoning_payload(model, thinking_by_model),
         )
-        scope_payload = _extract_json(scope_response.get("content", "")) if scope_response else None
+        scope_payload = _extract_json(_safe_content(scope_response) or "")
         if scope_payload:
             search_query_target_count = _compute_search_query_count(scope_payload)
             preferred_sources = scope_payload.get("preferred_sources")
@@ -1164,7 +1943,7 @@ Return ONLY a JSON array of objects:
                 messages,
                 extra_body=build_reasoning_payload(model, thinking_by_model),
             )
-            content = response.get('content', '[]') if response else "[]"
+            content = response.get('content', '[]') if _safe_content(response) else "[]"
             parsed_targets = _extract_json_array(content) or []
             search_targets = [target for target in parsed_targets if isinstance(target, dict)]
             if not search_targets:
@@ -1217,8 +1996,8 @@ Return JSON:
 </output_format>"""
 
                 search_response = await query_search_model([{"role": "user", "content": search_prompt}])
-                raw_content = search_response.get("content", "") if search_response else ""
-                annotations = search_response.get("annotations") if search_response else None
+                raw_content = search_response.get("content", "") if _safe_content(search_response) else ""
+                annotations = search_response.get("annotations") if _safe_content(search_response) else None
                 evidence = _extract_json(raw_content) or {}
 
                 verdict = evidence.get("verdict") or "unclear"
@@ -1325,7 +2104,7 @@ Provide your verification report now. Include both factual and reasoning issues:
         messages,
         extra_body=build_reasoning_payload(model, thinking_by_model),
     )
-    verification_content = response.get('content', 'Verification unavailable.') if response else "Verification unavailable."
+    verification_content = response.get('content', 'Verification unavailable.') if _safe_content(response) else "Verification unavailable."
     if search_status_notes:
         status_block = "## Search Status\n" + "\n".join(f"- {note}" for note in search_status_notes)
         verification_content = f"{status_block}\n\n{verification_content}"
@@ -1404,7 +2183,7 @@ Provide the synthesis plan now:"""
         messages,
         extra_body=build_reasoning_payload(model, thinking_by_model),
     )
-    return response.get('content', 'Planning unavailable.') if response else "Planning unavailable."
+    return response.get('content', 'Planning unavailable.') if _safe_content(response) else "Planning unavailable."
 
 
 async def stage_editorial_guidelines(
@@ -1489,7 +2268,9 @@ Provide the editorial guidelines now:"""
         messages,
         extra_body=build_reasoning_payload(model, thinking_by_model),
     )
-    return response.get('content', 'Editorial guidelines unavailable.').replace("```markdown", "").replace("```", "") if response else "Editorial guidelines unavailable."
+    if not _safe_content(response):
+        return "Editorial guidelines unavailable."
+    return response.get('content', 'Editorial guidelines unavailable.').replace("```markdown", "").replace("```", "")
 
 
 async def stage3_synthesize_final(
@@ -1596,7 +2377,9 @@ Do not include meta-commentary about the process.
         messages,
         extra_body=build_reasoning_payload(chairman, thinking_by_model),
     )
-    return {"model": chairman, "response": response.get('content', 'Error: Synthesis failed.') if response else "Error: Synthesis failed."}
+    if not _safe_content(response):
+        return {"model": chairman, "response": "Error: Synthesis failed."}
+    return {"model": chairman, "response": response.get('content', 'Error: Synthesis failed.')}
 
 
 async def generate_conversation_title(user_query: str) -> str:
@@ -1607,7 +2390,7 @@ async def generate_conversation_title(user_query: str) -> str:
 Title:"""
     messages = [{"role": "user", "content": title_prompt}]
     response = await query_model("google/gemini-2.0-flash-001", messages, timeout=30.0)
-    if response is None:
+    if not _safe_content(response):
         return "New Conversation"
     title = response.get('content', 'New Conversation').strip().strip('"\'')
     return title[:47] + "..." if len(title) > 50 else title

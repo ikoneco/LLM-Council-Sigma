@@ -302,11 +302,53 @@ function App() {
 
       case 'complete':
         loadConversations();
+        setCurrentConversation((prev) => {
+          if (!prev || !prev.messages || prev.messages.length === 0) return prev;
+          const messages = [...prev.messages];
+          const lastMsg = {
+            ...messages[messages.length - 1],
+            loading: {
+              ...(messages[messages.length - 1].loading || {}),
+              intent_draft: false,
+              stage0: false,
+              brainstorm: false,
+              contributions: false,
+              verification: false,
+              planning: false,
+              editorial: false,
+              stage3: false,
+            },
+          };
+          messages[messages.length - 1] = lastMsg;
+          return { ...prev, messages };
+        });
         setIsLoading(false);
         break;
 
       case 'error':
         console.error('Stream error:', event.message);
+        setCurrentConversation((prev) => {
+          if (!prev || !prev.messages || prev.messages.length === 0) return prev;
+          const messages = [...prev.messages];
+          const lastMsg = {
+            ...messages[messages.length - 1],
+            status: 'error',
+            error_message: event.message,
+            loading: {
+              ...(messages[messages.length - 1].loading || {}),
+              intent_draft: false,
+              stage0: false,
+              brainstorm: false,
+              contributions: false,
+              verification: false,
+              planning: false,
+              editorial: false,
+              stage3: false,
+            },
+          };
+          messages[messages.length - 1] = lastMsg;
+          return { ...prev, messages };
+        });
         setIsLoading(false);
         break;
 

@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { HelpCircle, CheckCircle2 } from 'lucide-react';
+import { Children, isValidElement, useEffect, useMemo, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { HelpCircle, Target, Compass, Lightbulb, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import './IntentClarificationStage.css';
 
 export default function IntentClarificationStage({
@@ -76,68 +78,182 @@ export default function IntentClarificationStage({
     };
   };
 
-  const unclearDisplay = Array.isArray(display?.unclear) ? display.unclear : [];
-
-  const successCriteria = Array.isArray(draftIntent?.success_criteria)
-    ? draftIntent.success_criteria
-    : [];
-  const latentHypotheses = Array.isArray(draftIntent?.latent_intent_hypotheses)
-    ? draftIntent.latent_intent_hypotheses
-    : [];
-  const ambiguities = Array.isArray(draftIntent?.ambiguities)
-    ? draftIntent.ambiguities
-    : [];
-  const assumptions = Array.isArray(draftIntent?.assumptions)
-    ? draftIntent.assumptions
-    : [];
-
-  const limitList = (list, limit = 4) => {
-    const trimmed = list.slice(0, limit);
-    const remaining = list.length - trimmed.length;
-    if (remaining > 0) {
-      trimmed.push(`+${remaining} more`);
+  const toText = (value, options = {}) => {
+    const { includeWhy = true, preferKeys } = options;
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string' || typeof value === 'number') return String(value).trim();
+    if (typeof value === 'object') {
+      const assumptionText = typeof value.assumption === 'string' ? value.assumption.trim() : '';
+      const why = typeof value.why_it_matters === 'string' ? value.why_it_matters.trim() : '';
+      if (includeWhy && assumptionText && why) {
+        return `${assumptionText} (why it matters: ${why})`;
+      }
+      const directKeys = preferKeys || ['text', 'summary', 'title', 'label', 'description', 'reason', 'detail', 'value'];
+      for (const key of directKeys) {
+        const candidate = typeof value[key] === 'string' ? value[key].trim() : '';
+        if (candidate) return candidate;
+      }
+      const parts = Object.entries(value)
+        .map(([key, item]) => {
+          if (typeof item === 'string' || typeof item === 'number') {
+            return `${key}: ${String(item).trim()}`;
+          }
+          return '';
+        })
+        .filter(Boolean);
+      if (parts.length > 0) return parts.join('; ');
     }
-    return trimmed;
+    return '';
   };
 
-  const assumptionItems = limitList(
-    assumptions.map((item) => {
-      if (typeof item === 'string') {
-        return `${item} (why it matters: it can change the scope or solution)`;
-      }
-      const assumptionText = item.assumption || '';
-      const why = item.why_it_matters || (item.risk ? `risk level: ${item.risk}` : '');
-      if (!why) {
-        return `${assumptionText} (why it matters: it can change the scope or solution)`;
-      }
-      return `${assumptionText} (why it matters: ${why})`;
-    }),
-    3
-  );
+  const normalizeList = (items, options = {}) => {
+    if (!Array.isArray(items)) return [];
+    return items.map((item) => toText(item, options)).filter(Boolean);
+  };
 
-  const hypothesisItems = limitList(latentHypotheses, 3);
+  const unclearDisplay = normalizeList(display?.unclear);
+  const reconstructedAsk = typeof display?.reconstructed_ask === 'string' && display.reconstructed_ask.trim()
+    ? display.reconstructed_ask.trim()
+    : '';
+  const deepRead = typeof display?.deep_read === 'string' && display.deep_read.trim()
+    ? display.deep_read.trim()
+    : '';
+  const decisionFocus = typeof display?.decision_focus === 'string' && display.decision_focus.trim()
+    ? display.decision_focus.trim()
+    : '';
+  const displayMarkdown = typeof display?.markdown === 'string' && display.markdown.trim()
+    ? display.markdown.trim()
+    : '';
+
+  const latentHypotheses = normalizeList(draftIntent?.latent_intent_hypotheses);
+  const ambiguities = normalizeList(draftIntent?.ambiguities);
+  const assumptions = Array.isArray(draftIntent?.assumptions) ? draftIntent.assumptions : [];
+
+  const assumptionDisplay = normalizeList(display?.assumptions, { preferKeys: ['assumption', 'text', 'summary', 'title', 'label', 'description'] });
+  const assumptionItems = assumptionDisplay.length > 0
+    ? assumptionDisplay
+    : assumptions.map((item) => {
+        const base = toText(item, {
+          includeWhy: false,
+          preferKeys: ['assumption', 'text', 'summary', 'title', 'label', 'description'],
+        });
+        if (!base) return '';
+        if (typeof item === 'object' && item && typeof item.why_it_matters === 'string' && item.why_it_matters.trim()) {
+          return `${base} (why it matters: ${item.why_it_matters.trim()})`;
+        }
+        return `${base} (why it matters: it can change the scope or solution)`;
+      }).filter(Boolean);
+
+  const understandingItems = normalizeList(display?.understanding);
+  const fallbackUnderstanding = understandingItems.length > 0 ? understandingItems : latentHypotheses;
 
   const openItemsRaw = [...unclearDisplay, ...ambiguities];
-  const openItems = limitList(
-    Array.from(new Set(openItemsRaw.filter(Boolean))),
-    4
-  );
-  const successItems = limitList(successCriteria, 4);
-
+  const openItems = Array.from(new Set(openItemsRaw.filter(Boolean)));
   const explicitConstraints = Array.isArray(draftIntent?.explicit_constraints)
     ? draftIntent.explicit_constraints
     : [];
   const primaryAskContext = [
     draftIntent?.audience ? `Audience: ${draftIntent.audience}` : '',
-    explicitConstraints.length > 0 ? `Constraints: ${explicitConstraints.slice(0, 2).join('; ')}` : '',
+    explicitConstraints.length > 0 ? `Constraints: ${explicitConstraints.join('; ')}` : '',
   ].filter(Boolean);
   const primaryAskLine = draftIntent?.primary_intent
     ? `${draftIntent.primary_intent}${primaryAskContext.length ? ` (${primaryAskContext.join(' | ')})` : ''}`
     : 'Not specified yet';
 
-  const impliedSuccessLine = successItems.length > 0
-    ? successItems.join('; ')
-    : 'Not specified yet';
+  const intentMarkdown = useMemo(() => {
+    if (displayMarkdown) {
+      return displayMarkdown;
+    }
+    const toParagraph = (items) => {
+      if (!items || items.length === 0) {
+        return '';
+      }
+      return items
+        .map((item) => (/[.!?]$/.test(item.trim()) ? item.trim() : `${item.trim()}.`))
+        .join(' ');
+    };
+
+    const fallbackDeepReadParts = [
+      toParagraph(fallbackUnderstanding),
+      toParagraph(assumptionItems),
+      toParagraph(openItems),
+    ].filter(Boolean);
+    const fallbackDeepRead = fallbackDeepReadParts.join('\n\n');
+    const deepReadText = deepRead || fallbackDeepRead || primaryAskLine;
+    const askText = reconstructedAsk || deepReadText.split('\n')[0].trim() || primaryAskLine;
+    const ambiguityText = openItems.length > 0
+      ? `Key uncertainties include ${openItems.join('; ')}.`
+      : '';
+    const decisionText = decisionFocus || ambiguityText || 'Confirm the most important tradeoff before proceeding.';
+
+    return [
+      '### Your Request, Refined',
+      askText,
+      '',
+      '### Deep Intent Read',
+      deepReadText,
+      '',
+      '### Ambiguities and Areas to Clarify',
+      decisionText,
+    ].join('\n');
+  }, [displayMarkdown, reconstructedAsk, primaryAskLine, deepRead, decisionFocus, fallbackUnderstanding, assumptionItems, openItems]);
+
+  const flattenText = (node) => {
+    const parts = [];
+    Children.forEach(node, (child) => {
+      if (typeof child === 'string' || typeof child === 'number') {
+        parts.push(String(child));
+      } else if (isValidElement(child)) {
+        parts.push(flattenText(child.props.children));
+      }
+    });
+    return parts.join('');
+  };
+
+  const renderHeader = ({ children, level }) => {
+    const cleanText = flattenText(children)
+      .replace(/^\s*[\p{Emoji}\u2000-\u3300\uF000-\uFFFF]+\s*/u, '')
+      .replace(/^\s*#{1,6}\s*/, '')
+      .trim();
+
+    let Icon = Target;
+    if (cleanText.includes('Your Request') || cleanText.includes('Reconstructed Ask')) Icon = Target;
+    else if (cleanText.includes('Deep Intent') || cleanText.includes('Key Interpretation')) Icon = Compass;
+    else if (cleanText.includes('Ambiguities') || cleanText.includes('Areas to Clarify') || cleanText.includes('Where We Might Be Off') || cleanText.includes('Critical Ambiguities')) Icon = AlertTriangle;
+    else if (cleanText.includes('Assumptions')) Icon = Lightbulb;
+
+    const Tag = level === 1 ? 'h1' : level === 2 ? 'h2' : 'h3';
+
+    return (
+      <Tag className="markdown-header-with-icon" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px', marginBottom: '6px' }}>
+        <Icon size={18} style={{ color: 'var(--color-primary)' }} />
+        {cleanText}
+      </Tag>
+    );
+  };
+
+  const renderSubHeader = ({ children }) => {
+    const cleanText = flattenText(children)
+      .replace(/^\s*[\p{Emoji}\u2000-\u3300\uF000-\uFFFF]+\s*/u, '')
+      .replace(/^\s*#{1,6}\s*/, '')
+      .trim();
+    return <h4 className="intent-subheader">{cleanText}</h4>;
+  };
+
+  const markdownComponents = {
+    h1(props) {
+      return renderHeader({ ...props, level: 1 });
+    },
+    h2(props) {
+      return renderHeader({ ...props, level: 2 });
+    },
+    h3(props) {
+      return renderHeader({ ...props, level: 3 });
+    },
+    h4(props) {
+      return renderSubHeader(props);
+    },
+  };
 
   return (
     <div className="stage intent-clarification-stage">
@@ -146,51 +262,12 @@ export default function IntentClarificationStage({
         Intent Understanding
       </h3>
 
-      <div className="intent-section">
-        <div className="intent-section-title">Explicit intent</div>
-        <ul>
-          <li><span className="intent-label">Primary ask:</span> {primaryAskLine}</li>
-          <li><span className="intent-label">Implied success criteria:</span> {impliedSuccessLine}</li>
-        </ul>
-      </div>
-
-      <div className="intent-section">
-        <div className="intent-section-title">Likely latent intent</div>
-        {hypothesisItems.length > 0 ? (
-          <ul>
-            {hypothesisItems.map((item, idx) => (
-              <li key={`latent-${idx}`}>{item}</li>
-            ))}
-          </ul>
-        ) : (
-          <div className="intent-empty">No strong latent intent inferred yet.</div>
-        )}
-      </div>
-
-      <div className="intent-section">
-        <div className="intent-section-title">Hidden assumptions (and why they matter)</div>
-        {assumptionItems.length > 0 ? (
-          <ul>
-            {assumptionItems.map((item, idx) => (
-              <li key={`assumption-${idx}`}>{item}</li>
-            ))}
-          </ul>
-        ) : (
-          <div className="intent-empty">No major assumptions noted yet.</div>
-        )}
-      </div>
-
-      <div className="intent-section">
-        <div className="intent-section-title">Critical ambiguities / scope gaps</div>
-        {openItems.length > 0 ? (
-          <ul>
-            {openItems.map((item, idx) => (
-              <li key={`open-${idx}`}>{item}</li>
-            ))}
-          </ul>
-        ) : (
-          <div className="intent-empty">No critical gaps flagged yet.</div>
-        )}
+      <div className="intent-analysis">
+        <div className="analysis-content markdown-content">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+            {intentMarkdown}
+          </ReactMarkdown>
+        </div>
       </div>
 
       {awaitingClarification ? (

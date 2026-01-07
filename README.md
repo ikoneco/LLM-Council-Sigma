@@ -5,10 +5,10 @@
 ## ✨ Key Features
 
 - **Multi-Stage Orchestration**: Moves beyond simple prompting to a state-managed workflow.
-- **Model Selection**: Users choose the Chairman model, any number of expert models, and optionally enable per-model “thinking” (models are reused to staff 6 experts if fewer are selected).
+- **Model Selection**: Users choose the Chairman model, any number of expert models, and optionally enable per-model reasoning with configurable effort or token budgets (models are reused to staff 6 experts if fewer are selected).
 - **No Preselection**: New threads start with no models selected so the user explicitly controls the panel before running.
 - **Dynamic Expert Selection**: Automatically identifies the specialized roles needed (e.g., "Senior Product Strategist", "Security Architect") based on the query.
-- **Intent Clarification Loop**: Draft intent understanding + 3–6 high-impact questions (skippable) before the pipeline runs.
+- **Intent Clarification Loop**: Deep intent read with adaptive headings + 3–6 high-impact questions (model chooses how many based on ambiguity; skippable) before the pipeline runs.
 - **Sequential Collaboration**: Experts build upon each other's work, providing deep, layered insights.
 - **Verification & Reasoning Audit**: A dedicated stage checks claims, logic, gaps, and inconsistencies using web search when available (query count scales 3-8) with a visible Search Status note if evidence is missing.
 - **Editorial Synthesis**: A final "Chairman" synthesizes all contributions into a cohesive, style-calibrated response (Editorial/Council voice).
@@ -21,7 +21,7 @@
 ## 🔄 The Council Workflow
 
 0. **Model Selection**: Choose the Chairman model and any number of expert models; optionally enable per-model thinking. The system always staffs 6 experts and reuses models if needed.
-1. **🎯 Intent Draft + Clarifications**: The system summarizes its understanding and asks 3–6 high-impact questions (or you can skip).
+1. **🎯 Intent Draft + Clarifications**: The system produces a deep intent read with an "Ambiguities and Areas to Clarify" section and asks 3–6 high-impact questions (or you can skip).
 2. **✅ Brainstorm Intent Brief**: A concise brief (no assumptions) guides expert brainstorming.
 3. **🧠 Expert Brainstorm**: Multiple models propose the ideal team of experts.
 4. **👥 Sequential Contributions**: Selected experts (simulated by LLMs) contribute linearly, reviewing and building on prior work.
@@ -49,7 +49,7 @@
 - **Runtime**: Python 3.10+
 - **Framework**: FastAPI + Uvicorn
 - **Orchestration**: Custom async pipeline handling SSE (Server-Sent Events)
-- **AI Provider**: OpenRouter (Minimax, DeepSeek, Qwen, Z-AI GLM, Kimi, GPT-5.2, Gemini 3 Flash Preview, Mimo, Devstral)
+- **AI Provider**: OpenRouter (Minimax, DeepSeek, Qwen, Z-AI GLM, Kimi, GPT-5.2, Gemini 3 Flash Preview, Mimo, Devstral, Grok 4.1 Fast)
 - **Package Manager**: `uv`
 
 ## Getting Started

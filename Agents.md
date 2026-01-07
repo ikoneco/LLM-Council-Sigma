@@ -1,4 +1,4 @@
-# Agents.md - LLM Council Handoff Guide
+# AGENTS.md - LLM Council Handoff Guide
 
 ## Purpose
 This file is the handoff guide for agents and maintainers. It documents how the system works, where to make changes, and the operational constraints that matter most.
@@ -21,6 +21,25 @@ npm run dev
 
 Environment:
 - `OPENROUTER_API_KEY` in `.env`
+
+## [CONFIG] Project Configuration (Actual Stack)
+Agents must prioritize these values over generic templates.
+
+```yaml
+PROJECT_LANGUAGE: JavaScript (React) + Python
+LANGUAGE_MODE: Existing JS/JSX + Python 3.10+
+FRONTEND_FRAMEWORK: React 19 + Vite
+STATE_MANAGEMENT: React state (App.jsx orchestration)
+STYLING_SOLUTION: Vanilla CSS (design tokens in index.css)
+DESIGN_TOKEN_PATH: frontend/src/index.css
+COMPONENT_LIBRARY_PATH: frontend/src/components/
+ARCHITECTURE_PATTERN: Layered (backend / frontend / docs)
+TEST_RUNNER_COMMAND: none (manual checks only)
+LINT_COMMAND: none
+FORMAT_COMMAND: none
+TYPECHECK_COMMAND: none
+FULL_BUILD_COMMAND: frontend: npm run build
+```
 
 ## System Summary
 LLM Council runs an 8-stage pipeline with an explicit model selection phase upfront:
@@ -56,6 +75,44 @@ Frontend:
 Docs:
 - `docs/ARCHITECTURE.md`: System design and pipeline details
 - `docs/API.md`: API endpoints and SSE event types
+
+## Core Mandate (Principal Engineer + Product Founder)
+Prioritize long-term health and a top-quality user experience:
+
+- Architecture: modular, testable, and easy to extend.
+- Code quality: readable, consistent, minimal technical debt.
+- UX: clear, fast, accessible, and delightful.
+
+## Architecture and Modularity
+- Keep backend orchestration in `backend/council.py`, not scattered across files.
+- Keep UI state flow in `frontend/src/App.jsx` and stage rendering in components.
+- Avoid cross-layer coupling: backend prompts should not assume frontend rendering details.
+
+## Code Hygiene and Standards
+- Prefer explicit, deterministic logic when parsing or normalizing model output.
+- Do not hard-code secrets or access tokens.
+- Keep prompts and JSON schemas stable; changes must be reflected in docs.
+- Use small, composable helpers rather than large monolith functions.
+- Use comments only when they clarify non-obvious logic.
+
+## UI/UX Directives
+- Use design tokens from `frontend/src/index.css` (no hard-coded colors or fonts).
+- Maintain consistent heading hierarchy and spacing.
+- Prefer readable, scannable layouts with progressive disclosure.
+- Ensure interactive elements are keyboard-friendly and visually clear.
+
+## Agent Workflow and Autonomy
+- Execute P2/P3 improvements (code quality + UX polish) without extra confirmation.
+- Ask before: new dependencies, major architecture changes, deleting core files, or commits/pushes.
+- If scope is ambiguous, present 2–3 options with trade-offs and ask for a decision.
+
+## Personal Quality Gate (Self-Review)
+- Correctness: does it meet the request end-to-end?
+- Safety: no secrets, no unsafe inputs.
+- Performance: no unnecessary loops or heavy operations.
+- Readability: consistent naming and structure.
+- UI/UX: no regressions; visually consistent.
+- Use "Nit:" for non-critical polish suggestions.
 
 ## Model Selection Rules
 - Users must select at least 1 expert model.

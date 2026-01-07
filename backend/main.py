@@ -28,6 +28,13 @@ from .config import (
     MIN_EXPERT_MODELS,
     DEFAULT_NUM_EXPERTS,
     THINKING_SUPPORTED_MODELS,
+    THINKING_EFFORT,
+    THINKING_MAX_TOKENS,
+    REASONING_EFFORT_MODELS,
+    REASONING_MAX_TOKENS_MODELS,
+    REASONING_EFFORT_LEVELS,
+    REASONING_MAX_TOKENS_MIN,
+    REASONING_MAX_TOKENS_MAX,
 )
 
 app = FastAPI(title="LLM Council API")
@@ -49,7 +56,7 @@ class ModelSelection(BaseModel):
     chairman_model: str
     expert_models: List[str]
     thinking_enabled: Optional[bool] = False
-    thinking_by_model: Optional[Dict[str, bool]] = None
+    thinking_by_model: Optional[Dict[str, Any]] = None
 
 
 class SendMessageRequest(BaseModel):
@@ -91,7 +98,29 @@ class Conversation(BaseModel):
     messages: List[Dict[str, Any]]
 
 
-def normalize_model_selection(selection: Optional[Any]) -> Tuple[str, List[str], Dict[str, bool]]:
+def _normalize_thinking_config(raw_value: Any) -> Optional[Any]:
+    if isinstance(raw_value, bool):
+        return True if raw_value else None
+    if isinstance(raw_value, dict):
+        enabled = raw_value.get("enabled", True)
+        if enabled is False:
+            return None
+        config: Dict[str, Any] = {}
+        effort = raw_value.get("effort")
+        if isinstance(effort, str) and effort in REASONING_EFFORT_LEVELS:
+            config["effort"] = effort
+        max_tokens = raw_value.get("max_tokens")
+        if isinstance(max_tokens, int):
+            max_tokens = max(REASONING_MAX_TOKENS_MIN, min(max_tokens, REASONING_MAX_TOKENS_MAX))
+            config["max_tokens"] = max_tokens
+        exclude = raw_value.get("exclude")
+        if isinstance(exclude, bool):
+            config["exclude"] = exclude
+        return config or True
+    return None
+
+
+def normalize_model_selection(selection: Optional[Any]) -> Tuple[str, List[str], Dict[str, Any]]:
     if selection is None:
         return CHAIRMAN_MODEL, COUNCIL_MODELS, {}
 
@@ -127,12 +156,15 @@ def normalize_model_selection(selection: Optional[Any]) -> Tuple[str, List[str],
             detail=f"Select at least {MIN_EXPERT_MODELS} expert models",
         )
 
-    thinking_by_model: Dict[str, bool] = {}
+    thinking_by_model: Dict[str, Any] = {}
     raw_map = getattr(selection, "thinking_by_model", None)
     if isinstance(raw_map, dict):
-        for model, enabled in raw_map.items():
-            if model in THINKING_SUPPORTED_MODELS and enabled:
-                thinking_by_model[model] = True
+        for model, raw_value in raw_map.items():
+            if model not in THINKING_SUPPORTED_MODELS:
+                continue
+            normalized = _normalize_thinking_config(raw_value)
+            if normalized is not None:
+                thinking_by_model[model] = normalized
     elif bool(getattr(selection, "thinking_enabled", False)):
         for model in {selection.chairman_model, *expert_models}:
             if model in THINKING_SUPPORTED_MODELS:
@@ -154,6 +186,13 @@ async def list_models():
         "default_chairman_model": CHAIRMAN_MODEL,
         "min_expert_models": MIN_EXPERT_MODELS,
         "thinking_supported_models": sorted(THINKING_SUPPORTED_MODELS),
+        "reasoning_effort_models": sorted(REASONING_EFFORT_MODELS),
+        "reasoning_max_tokens_models": sorted(REASONING_MAX_TOKENS_MODELS),
+        "reasoning_effort_levels": REASONING_EFFORT_LEVELS,
+        "reasoning_max_tokens_min": REASONING_MAX_TOKENS_MIN,
+        "reasoning_max_tokens_max": REASONING_MAX_TOKENS_MAX,
+        "default_reasoning_effort": THINKING_EFFORT,
+        "default_reasoning_max_tokens": THINKING_MAX_TOKENS,
     }
 
 
@@ -214,11 +253,14 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
 
             # Phase 1: Draft intent + clarification questions
             yield f"data: {json.dumps({'type': 'intent_draft_start'})}\n\n"
-            intent_draft = await stage0_generate_intent_draft(
-                request.content,
-                history,
-                analysis_model=chairman_model,
-                thinking_by_model=thinking_by_model,
+            intent_draft = await asyncio.wait_for(
+                stage0_generate_intent_draft(
+                    request.content,
+                    history,
+                    analysis_model=chairman_model,
+                    thinking_by_model=thinking_by_model,
+                ),
+                timeout=90.0,
             )
             storage.add_assistant_message_intent_draft(
                 conversation_id,

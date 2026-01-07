@@ -25,6 +25,13 @@ export default function ChatInterface({
   const [thinkingByModel, setThinkingByModel] = useState({});
   const [selectionLocked, setSelectionLocked] = useState(false);
   const [hasEditedSelection, setHasEditedSelection] = useState(false);
+  const isThinkingEntryEnabled = (entry) => {
+    if (!entry) return false;
+    if (typeof entry === 'object') {
+      return entry.enabled !== false;
+    }
+    return Boolean(entry);
+  };
 
   const fallbackAvailableModels = [
     'minimax/minimax-m2.1',
@@ -274,7 +281,8 @@ export default function ChatInterface({
                         <div className="model-selection-summary">
                           {(() => {
                             const thinkingMap = msg.metadata.model_selection.thinking_by_model || {};
-                            const thinkingModels = Object.keys(thinkingMap).filter((model) => thinkingMap[model]);
+                            const thinkingModels = Object.keys(thinkingMap)
+                              .filter((model) => isThinkingEntryEnabled(thinkingMap[model]));
                             return (
                               <>
                                 <div className="model-selection-group">
@@ -318,6 +326,18 @@ export default function ChatInterface({
                       <div className="stage-loading">
                         <div className="spinner"></div>
                         <span>Drafting intent understanding...</span>
+                      </div>
+                    )}
+
+                    {msg.status === 'error' && msg.error_message && (
+                      <div className="stage error-stage">
+                        <h3 className="stage-title">
+                          <AlertTriangle size={18} />
+                          Intent Understanding Error
+                        </h3>
+                        <div className="error-message">
+                          {msg.error_message}
+                        </div>
                       </div>
                     )}
 
@@ -502,6 +522,13 @@ export default function ChatInterface({
               minExpertModels={minExpertModels}
               thinkingByModel={thinkingByModel}
               thinkingSupportedModels={modelCatalog?.thinking_supported_models}
+              reasoningEffortModels={modelCatalog?.reasoning_effort_models}
+              reasoningMaxTokensModels={modelCatalog?.reasoning_max_tokens_models}
+              reasoningEffortLevels={modelCatalog?.reasoning_effort_levels}
+              reasoningMaxTokensMin={modelCatalog?.reasoning_max_tokens_min}
+              reasoningMaxTokensMax={modelCatalog?.reasoning_max_tokens_max}
+              defaultReasoningEffort={modelCatalog?.default_reasoning_effort}
+              defaultReasoningMaxTokens={modelCatalog?.default_reasoning_max_tokens}
               onChange={({ chairmanModel: nextChairman, expertModels: nextExperts, thinkingByModel: nextThinking }) => {
                 setHasEditedSelection(true);
                 setChairmanModel(nextChairman);

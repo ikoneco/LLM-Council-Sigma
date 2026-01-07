@@ -22,7 +22,14 @@ Retrieve the available models and default selections.
     "default_expert_models": ["model-a", "model-b"],
     "default_chairman_model": "model-a",
     "min_expert_models": 1,
-    "thinking_supported_models": ["model-a"]
+    "thinking_supported_models": ["model-a"],
+    "reasoning_effort_models": ["model-a"],
+    "reasoning_max_tokens_models": ["model-b"],
+    "reasoning_effort_levels": ["minimal", "low", "medium", "high", "xhigh", "none"],
+    "reasoning_max_tokens_min": 256,
+    "reasoning_max_tokens_max": 8000,
+    "default_reasoning_effort": "medium",
+    "default_reasoning_max_tokens": 2000
   }
   ```
 
@@ -95,7 +102,11 @@ Retrieve the full message history and metadata for a specific conversation.
             "chairman_model": "minimax/minimax-m2.1",
             "expert_models": ["..."],
             "thinking_by_model": {
-              "minimax/minimax-m2.1": true
+              "minimax/minimax-m2.1": {
+                "enabled": true,
+                "effort": "high",
+                "exclude": false
+              }
             }
           }
         }
@@ -107,6 +118,7 @@ Retrieve the full message history and metadata for a specific conversation.
   Notes:
   - `status` values include `clarification_pending`, `clarification_submitted`, and `complete`.
   - `intent_draft` / `intent_display` / `clarification_questions` appear before the pipeline runs.
+  - `intent_display` includes `reconstructed_ask`, `deep_read`, and `decision_focus` plus optional `assumptions` and `unclear` (used to render the Intent Understanding UI).
   - `stage0.analysis` contains the intent brief used to guide brainstorming.
 
 ### 5. Send Message (Stream)
@@ -131,8 +143,8 @@ Send a user query and receive the intent draft + clarification questions.
         "qwen/qwen3-235b-a22b-2507"
       ],
       "thinking_by_model": {
-        "minimax/minimax-m2.1": true,
-        "deepseek/deepseek-v3.2": true
+        "minimax/minimax-m2.1": { "effort": "high" },
+        "deepseek/deepseek-v3.2": { "effort": "medium", "exclude": true }
       }
     }
   }
@@ -141,7 +153,7 @@ Send a user query and receive the intent draft + clarification questions.
   Notes:
   - `model_selection` is optional; defaults apply if omitted.
   - `expert_models` must include at least 1 valid model.
-  - `thinking_by_model` is a per-model toggle; unsupported models are ignored.
+  - `thinking_by_model` accepts either `true` or a config object (`effort`, `max_tokens`, `exclude`) per model; unsupported models are ignored.
   - The initial stream ends after `clarification_required`; use the continue endpoint to run the full pipeline.
 
 - **Response**: `text/event-stream`
