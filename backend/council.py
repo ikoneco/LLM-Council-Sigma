@@ -1530,16 +1530,41 @@ Provide the intent brief now:"""
 
     messages = [{"role": "user", "content": intent_prompt}]
     model_name = analysis_model or CHAIRMAN_MODEL
+    reasoning_payload = build_reasoning_payload(model_name, thinking_by_model)
     response = await query_model(
         model_name,
         messages,
-        extra_body=build_reasoning_payload(model_name, thinking_by_model),
+        extra_body=reasoning_payload,
     )
 
-    if not _safe_content(response):
+    content = _safe_content(response)
+    if not content or not content.strip():
+        # Retry without reasoning config if the model returned empty content.
+        response = await query_model(
+            model_name,
+            messages,
+            extra_body={"max_tokens": 1400},
+        )
+        content = _safe_content(response)
+
+    if not content or not content.strip():
+        # Try fallback intent models to ensure we return a usable intent brief.
+        for candidate in _intent_model_candidates(model_name):
+            if candidate == model_name:
+                continue
+            response = await query_model(
+                candidate,
+                messages,
+                extra_body={"max_tokens": 1400, "temperature": 0},
+            )
+            content = _safe_content(response)
+            if content and content.strip():
+                break
+
+    if not content or not content.strip():
         return "Intent analysis unavailable."
 
-    return response.get("content", "Intent analysis unavailable.")
+    return content
 
 
 async def stage_brainstorm_experts(
@@ -1822,7 +1847,8 @@ Structure your response as follows:
 - Integrate with and enhance prior work
 - Introduce at least two NEW angles, frameworks, or considerations not covered yet
 - Anchor every point to the user's intent, goals, and success criteria
-- Target 250-400 words
+- Target 300-450 words and deliver a complete, field-expert-level contribution (not a shortlist of ideas)
+- Write in full paragraphs (not fragments or bullet-only lists)
 
 **## Evolution Note (Keep / Change / Add)**
 - Keep: ...
@@ -1839,6 +1865,7 @@ Structure your response as follows:
 - **Actionability**: The user should be able to act on this.
 - **Coherence**: Build a unified artifact, not disconnected pieces.
 - **Grounding**: Stay anchored to the user’s intent; avoid unrelated domains or unnecessary complexity.
+- **Completeness**: Fully cover your expert mandate; do not omit critical steps or caveats for your domain.
 </quality_standards>
 
 Provide your rigorous expert contribution now:"""

@@ -244,6 +244,9 @@ export default function ChatInterface({
             const expertList = msg.experts
               || (Array.isArray(msg.stage0?.first_expert) ? msg.stage0.first_expert : null);
             const contributionList = msg.contributions || msg.debate || [];
+            const stage0Data = (msg.stage0 && msg.stage0.analysis)
+              ? msg.stage0
+              : (msg.metadata?.intent_analysis ? { analysis: msg.metadata.intent_analysis } : msg.stage0);
             const awaitingClarification = msg.awaiting_clarification ?? (msg.status === 'clarification_pending');
             const clarificationAnswers = msg.clarification_answers || msg.metadata?.clarification_answers;
             const intentDisplay = msg.intent_display ?? msg.intent_draft?.display;
@@ -360,7 +363,7 @@ export default function ChatInterface({
                         <span>Preparing intent brief...</span>
                       </div>
                     )}
-                    {msg.stage0 && <Stage0 data={msg.stage0} experts={expertList} />}
+                    {stage0Data && <Stage0 data={stage0Data} experts={expertList} />}
 
                     {/* Brainstorm Stage */}
                     {(msg.loading?.brainstorm || msg.brainstorm_content) && (

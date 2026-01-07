@@ -7,7 +7,9 @@ import './Stage0.css';
 export default function Stage0({ data, experts }) {
     if (!data) return null;
 
-    const analysis = data.analysis;
+    const analysis = typeof data.analysis === 'string'
+        ? data.analysis
+        : (data.analysis ? JSON.stringify(data.analysis, null, 2) : '');
 
     if (!analysis) return null;
 
